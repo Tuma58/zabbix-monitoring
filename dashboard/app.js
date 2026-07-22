@@ -4,9 +4,8 @@
   const API_BASE = '/api/v1';
   const TOKEN_KEY = 'netmon_access_token';
   const REFRESH_KEY = 'netmon_refresh_token';
-  // Local bootstrap defaults for Stage 1 preview; replace with login UI later.
-  const DEMO_EMAIL = 'admin@example.com';
-  const DEMO_PASSWORD = 'ChangeMeNow!';
+  // Default admin email for the login form; password is never stored in the client bundle.
+  const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -92,7 +91,10 @@
     return payload;
   }
 
-  async function login(email = DEMO_EMAIL, password = DEMO_PASSWORD) {
+  async function login(email = DEFAULT_ADMIN_EMAIL, password = '') {
+    if (!password) {
+      throw new Error('Password is required');
+    }
     const tokens = await api('/auth/login', {
       method: 'POST',
       body: { email, password },
@@ -101,6 +103,49 @@
     localStorage.setItem(TOKEN_KEY, tokens.access_token);
     localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
     return tokens;
+  }
+
+  function openLoginDialog(message = '') {
+    const dialog = $('#loginDialog');
+    if (!dialog) return Promise.resolve(false);
+    const emailField = $('#loginEmail');
+    const passwordField = $('#loginPassword');
+    const messageNode = $('#loginMessage');
+    if (emailField && !emailField.value) emailField.value = DEFAULT_ADMIN_EMAIL;
+    if (passwordField) passwordField.value = '';
+    if (messageNode) messageNode.textContent = message;
+    openDialog(dialog);
+    passwordField?.focus();
+    return new Promise((resolve) => {
+      dialog.dataset.loginResolver = 'pending';
+      dialog._loginResolve = resolve;
+    });
+  }
+
+  function closeLoginDialog(success) {
+    const dialog = $('#loginDialog');
+    if (!dialog) return;
+    if (typeof dialog._loginResolve === 'function') {
+      dialog._loginResolve(success);
+      dialog._loginResolve = null;
+    }
+    closeDialog(dialog);
+  }
+
+  async function promptLogin(message = 'Введите пароль администратора портала') {
+    const ok = await openLoginDialog(message);
+    if (!ok) return false;
+    try {
+      const email = $('#loginEmail')?.value || DEFAULT_ADMIN_EMAIL;
+      const password = $('#loginPassword')?.value || '';
+      await login(email, password);
+      const me = await api('/me');
+      applyUser(me);
+      return true;
+    } catch (error) {
+      showToast(error.message || 'Неверный логин или пароль');
+      return promptLogin('Неверный логин или пароль. Повторите попытку.');
+    }
   }
 
   async function ensureSession() {
@@ -128,10 +173,7 @@
     }
 
     try {
-      await login();
-      const me = await api('/me');
-      applyUser(me);
-      return true;
+      return await promptLogin();
     } catch (error) {
       setFooter('API доступен, но вход не выполнен');
       setSyncState('Нужна авторизация', false);
@@ -805,7 +847,19 @@
   $('#globalSearch').addEventListener('keydown', (event) => { if (event.key === 'Enter') searchDashboard(event.target.value); });
   $('#addSite').addEventListener('click', () => showToast('Добавление площадки доступно в настройках'));
   $('#reconnectApi')?.addEventListener('click', () => {
-    refreshDashboard().then(() => showToast('Синхронизация с API выполнена')).catch((error) => showToast(error.message || 'Ошибка API'));
+    promptLogin().then((ok) => {
+      if (!ok) return;
+      refreshDashboard().then(() => showToast('Синхронизация с API выполнена')).catch((error) => showToast(error.message || 'Ошибка API'));
+    });
+  });
+
+  $('#loginForm')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    closeLoginDialog(true);
+  });
+  $$('[data-close="loginDialog"]').forEach((button) => button.addEventListener('click', () => closeLoginDialog(false)));
+  $('#loginDialog')?.addEventListener('click', (event) => {
+    if (event.target.id === 'loginDialog') closeLoginDialog(false);
   });
 
   $('#menuButton').addEventListener('click', () => body.classList.add('nav-open'));

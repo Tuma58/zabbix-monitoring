@@ -289,6 +289,17 @@
     </div>
   </dialog>
 
+  <dialog class="modal settings-modal" id="loginDialog" aria-labelledby="loginTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Авторизация</p><h2 id="loginTitle">Вход в CoreSupport Monitor</h2><p id="loginMessage">Введите пароль администратора портала</p></div><button class="icon-button modal-close" data-close="loginDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <form id="loginForm" class="settings-grid" style="grid-template-columns:1fr;padding-top:8px">
+        <label class="field"><span>Email</span><input id="loginEmail" type="email" autocomplete="username" value="admin@example.com" required></label>
+        <label class="field"><span>Пароль</span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      </form>
+      <footer class="settings-footer"><span><svg><use href="#i-shield"/></svg>Сессия сохраняется в браузере</span><button class="button primary" type="submit" form="loginForm">Войти</button></footer>
+    </div>
+  </dialog>
+
   <dialog class="modal settings-modal" id="settingsDialog" aria-labelledby="settingsTitle">
     <div class="modal-shell">
       <header class="modal-head"><div><p class="eyebrow">Управление</p><h2 id="settingsTitle">Настройки мониторинга</h2><p>Подключения, площадки и правила в одном месте.</p></div><button class="icon-button modal-close" data-close="settingsDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
