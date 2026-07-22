@@ -45,11 +45,19 @@ cd /opt/netmon && sudo git pull --ff-only && sudo ./install.sh
 ```
 
 По умолчанию Zabbix UI (`:7080`), dashboard (`:7081`) и API (`:7000`) слушаются
-на `0.0.0.0` и доступны по внешнему IP VPS. После установки скрипт печатает
-точные URL и секреты.
+на `0.0.0.0` и доступны по внешнему IP и по локальному/VPN IP
+(`LOCAL_ACCESS_IP`, по умолчанию `100.10.10.66`). Дополнительно edge-nginx
+отдаёт HTTPS по IP (самоподписанный сертификат с SAN):
 
-- Zabbix UI: `http://VPS_IP:7080` (`Admin` / `zabbix`, смените пароль);
-- Dashboard: `http://VPS_IP:7081`;
+- HTTPS Zabbix: `https://IP:7443`
+- HTTPS Dashboard: `https://IP:7444`
+- HTTPS API: `https://IP:7445`
+
+После установки скрипт печатает точные URL и секреты. Браузер покажет
+предупреждение о самоподписанном сертификате — это ожидаемо для TLS по IP.
+
+- Zabbix UI: `http://VPS_IP:7080` или `http://100.10.10.66:7080` (`Admin` / `zabbix`);
+- Dashboard: `http://VPS_IP:7081` или `http://100.10.10.66:7081`;
 - API docs: `http://VPS_IP:7000/api/v1/docs`.
 
 Учётная запись портала задаётся в `.env`

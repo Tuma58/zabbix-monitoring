@@ -48,6 +48,128 @@ detect_public_ip() {
   printf '%s' "${ip:-SERVER_IP}"
 }
 
+# Локальный / VPN IP для доступа (Tailscale и т.п.). По умолчанию 100.10.10.66.
+detect_local_access_ip() {
+  local configured="${LOCAL_ACCESS_IP:-}"
+  if [[ -n "${configured}" ]]; then
+    printf '%s' "${configured}"
+    return
+  fi
+  if [[ -f "${ENV_FILE}" ]] && grep -q '^LOCAL_ACCESS_IP=' "${ENV_FILE}"; then
+    # shellcheck disable=SC1090
+    source "${ENV_FILE}"
+    if [[ -n "${LOCAL_ACCESS_IP:-}" ]]; then
+      printf '%s' "${LOCAL_ACCESS_IP}"
+      return
+    fi
+  fi
+  # Предпочитаем адрес из подсети 100.x (Tailscale/CGNAT), иначе первый non-loopback.
+  local candidate
+  candidate="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^100\.' | head -n1 || true)"
+  if [[ -z "${candidate}" ]]; then
+    candidate="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  printf '%s' "${candidate:-100.10.10.66}"
+}
+
+# Собирает IP для SAN сертификата: local, public, все адреса хоста, loopback.
+collect_tls_san_ips() {
+  local local_ip public_ip
+  local_ip="$(detect_local_access_ip)"
+  public_ip="$(detect_public_ip)"
+
+  local -a ips=()
+  local ip
+  for ip in "${local_ip}" "${public_ip}" 127.0.0.1; do
+    if [[ "${ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      ips+=("${ip}")
+    fi
+  done
+  while read -r ip; do
+    if [[ "${ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      ips+=("${ip}")
+    fi
+  done < <(hostname -I 2>/dev/null | tr ' ' '\n' || true)
+
+  printf '%s\n' "${ips[@]}" | awk 'NF && !seen[$0]++'
+}
+
+ensure_tls_certificates() {
+  local cert_dir="${SCRIPT_DIR}/certs"
+  local cert_file="${cert_dir}/netmon.crt"
+  local key_file="${cert_dir}/netmon.key"
+  local local_ip public_ip
+  local_ip="$(detect_local_access_ip)"
+  public_ip="$(detect_public_ip)"
+
+  mkdir -p "${cert_dir}"
+  chmod 700 "${cert_dir}"
+
+  local need_generate=0
+  if [[ ! -f "${cert_file}" || ! -f "${key_file}" ]]; then
+    need_generate=1
+  else
+    # Пересоздаём, если в SAN нет локального IP доступа.
+    if ! openssl x509 -in "${cert_file}" -noout -text 2>/dev/null \
+      | grep -Eq "IP Address:${local_ip}([^0-9]|$)"; then
+      need_generate=1
+      log "Сертификат без SAN для ${local_ip} — будет пересоздан"
+    fi
+  fi
+
+  if (( need_generate == 0 )); then
+    log "TLS-сертификат уже есть: ${cert_file}"
+    return
+  fi
+
+  command -v openssl >/dev/null 2>&1 || fail "openssl не найден (нужен для TLS-сертификата)"
+
+  local san_entries="" san_line ip
+  while read -r ip; do
+    [[ -n "${ip}" ]] || continue
+    if [[ -n "${san_entries}" ]]; then
+      san_entries+=","
+    fi
+    san_entries+="IP:${ip}"
+  done < <(collect_tls_san_ips)
+  san_entries+=",DNS:localhost,DNS:netmon.local"
+
+  local openssl_cfg
+  openssl_cfg="$(mktemp)"
+  cat > "${openssl_cfg}" <<EOF
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+distinguished_name = dn
+x509_extensions = v3_req
+
+[dn]
+CN = NetMon
+O = NetMon
+OU = Self-Signed IP TLS
+
+[v3_req]
+subjectAltName = ${san_entries}
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+basicConstraints = CA:FALSE
+EOF
+
+  openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+    -keyout "${key_file}" \
+    -out "${cert_file}" \
+    -config "${openssl_cfg}" >/dev/null 2>&1 \
+    || fail "Не удалось создать TLS-сертификат"
+  rm -f "${openssl_cfg}"
+
+  chmod 600 "${key_file}"
+  chmod 644 "${cert_file}"
+  log "Создан самоподписанный TLS-сертификат (SAN: ${local_ip}, ${public_ip}, …)"
+  log "  ${cert_file}"
+}
+
+
 install_docker() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     log "Установка Docker Engine из официального репозитория Docker"
@@ -186,6 +308,11 @@ ensure_required_env_vars() {
   ensure_env_default "ZABBIX_WEB_PORT" "7080"
   ensure_env_default "ZABBIX_SERVER_BIND" "0.0.0.0"
   ensure_env_default "ZABBIX_SERVER_PORT" "10051"
+  ensure_env_default "TLS_BIND" "0.0.0.0"
+  ensure_env_default "ZABBIX_TLS_PORT" "7443"
+  ensure_env_default "DASHBOARD_TLS_PORT" "7444"
+  ensure_env_default "API_TLS_PORT" "7445"
+  ensure_env_default "LOCAL_ACCESS_IP" "100.10.10.66"
   ensure_env_default "PHP_TZ" "Europe/Moscow"
 
   # Миграция со старых портов 80xx/8000 на 70xx.
@@ -208,13 +335,18 @@ ensure_required_env_vars() {
 ensure_public_web_binds() {
   [[ -f "${ENV_FILE}" ]] || return 0
 
-  local public_ip dash_port api_port web_port
+  local public_ip local_ip dash_port api_port web_port
+  local dash_tls api_tls web_tls
   public_ip="$(detect_public_ip)"
+  local_ip="$(detect_local_access_ip)"
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
   dash_port="${DASHBOARD_PORT:-7081}"
   api_port="${API_PORT:-7000}"
   web_port="${ZABBIX_WEB_PORT:-7080}"
+  dash_tls="${DASHBOARD_TLS_PORT:-7444}"
+  api_tls="${API_TLS_PORT:-7445}"
+  web_tls="${ZABBIX_TLS_PORT:-7443}"
 
   # Обновляем bind веб-сервисов на 0.0.0.0, если ещё loopback.
   if grep -q '^ZABBIX_WEB_BIND=127.0.0.1$' "${ENV_FILE}"; then
@@ -235,14 +367,37 @@ ensure_public_web_binds() {
     printf 'API_BIND=0.0.0.0\n' >> "${ENV_FILE}"
   fi
 
-  # CORS для dashboard/API с внешнего IP.
+  # CORS: HTTP + HTTPS, внешний IP + локальный/VPN IP (100.10.10.66).
   local cors_value
-  cors_value="http://${public_ip}:${dash_port},http://${public_ip}:${web_port},http://127.0.0.1:${dash_port},http://localhost:${dash_port}"
+  cors_value="$(
+    printf '%s,' \
+      "http://${public_ip}:${dash_port}" \
+      "https://${public_ip}:${dash_tls}" \
+      "http://${public_ip}:${web_port}" \
+      "https://${public_ip}:${web_tls}" \
+      "http://${local_ip}:${dash_port}" \
+      "https://${local_ip}:${dash_tls}" \
+      "http://${local_ip}:${web_port}" \
+      "https://${local_ip}:${web_tls}" \
+      "http://127.0.0.1:${dash_port}" \
+      "https://127.0.0.1:${dash_tls}" \
+      "http://localhost:${dash_port}" \
+      "https://localhost:${dash_tls}"
+  )"
+  cors_value="${cors_value%,}"
   if grep -q '^CORS_ORIGINS=' "${ENV_FILE}"; then
     sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=${cors_value}|" "${ENV_FILE}"
   else
     printf 'CORS_ORIGINS=%s\n' "${cors_value}" >> "${ENV_FILE}"
   fi
+
+  # Фиксируем LOCAL_ACCESS_IP, если ещё нет.
+  if ! grep -q '^LOCAL_ACCESS_IP=' "${ENV_FILE}"; then
+    printf 'LOCAL_ACCESS_IP=%s\n' "${local_ip}" >> "${ENV_FILE}"
+  elif grep -q '^LOCAL_ACCESS_IP=$' "${ENV_FILE}"; then
+    sed -i "s|^LOCAL_ACCESS_IP=.*|LOCAL_ACCESS_IP=${local_ip}|" "${ENV_FILE}"
+  fi
+
   chmod 600 "${ENV_FILE}"
 }
 
@@ -255,11 +410,12 @@ create_environment() {
     return
   fi
 
-  local db_password jwt_secret secrets_key public_ip
+  local db_password jwt_secret secrets_key public_ip local_ip
   db_password="$(random_secret)"
   jwt_secret="$(random_secret)"
   secrets_key="$(random_secret)"
   public_ip="$(detect_public_ip)"
+  local_ip="$(detect_local_access_ip)"
 
   umask 077
   {
@@ -288,8 +444,15 @@ create_environment() {
     printf 'DASHBOARD_PORT=%s\n' "${DASHBOARD_PORT:-7081}"
     printf 'API_BIND=%s\n' "${API_BIND:-0.0.0.0}"
     printf 'API_PORT=%s\n' "${API_PORT:-7000}"
-    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://${public_ip}:7081,http://${public_ip}:7080,http://127.0.0.1:7081,http://localhost:7081}"
-    printf 'PROBE_NETWORK_ALLOWLIST=%s\n' "${PROBE_NETWORK_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
+    # HTTPS edge (самоподписанный сертификат с SAN по IP).
+    printf 'TLS_BIND=%s\n' "${TLS_BIND:-0.0.0.0}"
+    printf 'ZABBIX_TLS_PORT=%s\n' "${ZABBIX_TLS_PORT:-7443}"
+    printf 'DASHBOARD_TLS_PORT=%s\n' "${DASHBOARD_TLS_PORT:-7444}"
+    printf 'API_TLS_PORT=%s\n' "${API_TLS_PORT:-7445}"
+    # Локальный/VPN IP (Tailscale и т.п.) для HTTP/HTTPS и CORS.
+    printf 'LOCAL_ACCESS_IP=%s\n' "${LOCAL_ACCESS_IP:-${local_ip}}"
+    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://${public_ip}:7081,https://${public_ip}:7444,http://${local_ip}:7081,https://${local_ip}:7444,http://127.0.0.1:7081,http://localhost:7081}"
+    printf 'PROBE_NETWORK_ALLOWLIST=%s\n' "${PROBE_NETWORK_ALLOWLIST:-10.0.0.0/8,100.64.0.0/10,172.16.0.0/12,192.168.0.0/16}"
     printf 'ZBX_CACHESIZE=128M\n'
     printf 'ZBX_HISTORYCACHESIZE=64M\n'
     printf 'ZBX_TRENDCACHESIZE=32M\n'
@@ -297,7 +460,7 @@ create_environment() {
   } > "${ENV_FILE}"
   chmod 600 "${ENV_FILE}"
   log "Создан ${ENV_FILE} со случайными секретами БД и API"
-  log "Веб-интерфейсы будут слушать 0.0.0.0 (доступ по внешнему IP)"
+  log "Веб-интерфейсы будут слушать 0.0.0.0 (доступ по внешнему и локальному IP)"
 }
 
 ensure_portal_database() {
@@ -414,8 +577,13 @@ print_next_steps() {
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
 
-  local public_ip host_label zabbix_url dashboard_url api_url
+  local public_ip local_ip host_label
+  local zabbix_url dashboard_url api_url
+  local zabbix_https dashboard_https api_https
+  local zabbix_local dashboard_local api_local
+  local zabbix_local_https dashboard_local_https api_local_https
   public_ip="$(detect_public_ip)"
+  local_ip="${LOCAL_ACCESS_IP:-$(detect_local_access_ip)}"
   if [[ "${ZABBIX_WEB_BIND:-0.0.0.0}" == "127.0.0.1" ]]; then
     host_label="127.0.0.1"
   else
@@ -425,6 +593,15 @@ print_next_steps() {
   zabbix_url="http://${host_label}:${ZABBIX_WEB_PORT:-7080}"
   dashboard_url="http://${host_label}:${DASHBOARD_PORT:-7081}"
   api_url="http://${host_label}:${API_PORT:-7000}/api/v1"
+  zabbix_https="https://${host_label}:${ZABBIX_TLS_PORT:-7443}"
+  dashboard_https="https://${host_label}:${DASHBOARD_TLS_PORT:-7444}"
+  api_https="https://${host_label}:${API_TLS_PORT:-7445}/api/v1"
+  zabbix_local="http://${local_ip}:${ZABBIX_WEB_PORT:-7080}"
+  dashboard_local="http://${local_ip}:${DASHBOARD_PORT:-7081}"
+  api_local="http://${local_ip}:${API_PORT:-7000}/api/v1"
+  zabbix_local_https="https://${local_ip}:${ZABBIX_TLS_PORT:-7443}"
+  dashboard_local_https="https://${local_ip}:${DASHBOARD_TLS_PORT:-7444}"
+  api_local_https="https://${local_ip}:${API_TLS_PORT:-7445}/api/v1"
 
   printf '\n'
   log "============================================================"
@@ -434,12 +611,25 @@ print_next_steps() {
   log "Статус сервисов:"
   compose ps
   printf '\n'
-  log "Веб-интерфейсы (внешний доступ):"
+  log "HTTPS по IP (самоподписанный сертификат — примите в браузере):"
+  log "  Zabbix UI:     ${zabbix_https}"
+  log "  Dashboard:     ${dashboard_https}"
+  log "  API docs:      ${api_https}/docs"
+  log "  Сертификат:    ${SCRIPT_DIR}/certs/netmon.crt"
+  printf '\n'
+  log "HTTP (внешний IP):"
   log "  Zabbix UI:     ${zabbix_url}"
   log "  Dashboard:     ${dashboard_url}"
   log "  API docs:      ${api_url}/docs"
-  log "  API health:    ${api_url}/health/live"
   log "  Внешний IP:    ${public_ip}"
+  printf '\n'
+  log "Локальный / VPN доступ (${local_ip}):"
+  log "  Zabbix HTTP:   ${zabbix_local}"
+  log "  Dashboard HTTP:${dashboard_local}"
+  log "  API HTTP:      ${api_local}/docs"
+  log "  Zabbix HTTPS:  ${zabbix_local_https}"
+  log "  Dashboard HTTPS:${dashboard_local_https}"
+  log "  API HTTPS:     ${api_local_https}/docs"
   printf '\n'
   log "------------------------------------------------------------"
   log " Секреты (сохраните и очистите историю терминала)"
@@ -457,16 +647,20 @@ print_next_steps() {
   log "  Пароль Zabbix UI:          zabbix   (смените сразу после входа)"
   printf '\n'
   log "Сетевые привязки:"
-  log "  Zabbix web:   ${ZABBIX_WEB_BIND:-0.0.0.0}:${ZABBIX_WEB_PORT:-7080}"
-  log "  Dashboard:    ${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-7081}"
-  log "  API:          ${API_BIND:-0.0.0.0}:${API_PORT:-7000}"
-  log "  Trapper:      ${ZABBIX_SERVER_BIND:-0.0.0.0}:${ZABBIX_SERVER_PORT:-10051}"
+  log "  Zabbix web HTTP:  ${ZABBIX_WEB_BIND:-0.0.0.0}:${ZABBIX_WEB_PORT:-7080}"
+  log "  Dashboard HTTP:   ${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-7081}"
+  log "  API HTTP:         ${API_BIND:-0.0.0.0}:${API_PORT:-7000}"
+  log "  Zabbix HTTPS:     ${TLS_BIND:-0.0.0.0}:${ZABBIX_TLS_PORT:-7443}"
+  log "  Dashboard HTTPS:  ${TLS_BIND:-0.0.0.0}:${DASHBOARD_TLS_PORT:-7444}"
+  log "  API HTTPS:        ${TLS_BIND:-0.0.0.0}:${API_TLS_PORT:-7445}"
+  log "  Trapper:          ${ZABBIX_SERVER_BIND:-0.0.0.0}:${ZABBIX_SERVER_PORT:-10051}"
   printf '\n'
   log "Полезные команды:"
   log "  cd ${SCRIPT_DIR}"
   log "  docker compose --env-file .env ps"
   log "  docker compose --env-file .env logs -f api"
   log "  curl -fsS ${api_url}/health/live"
+  log "  curl -kfsS ${api_https}/health/live"
   printf '\n'
   log "Рекомендация по firewall: ограничьте 10051/TCP сетями agent/proxy."
   log "Далее: ${SCRIPT_DIR}/docs/DEPLOYMENT.md"
@@ -479,6 +673,7 @@ main() {
   check_platform
   install_docker
   create_environment
+  ensure_tls_certificates
   start_stack
   wait_for_services
   print_next_steps

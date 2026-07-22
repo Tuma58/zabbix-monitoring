@@ -22,12 +22,18 @@ PostgreSQL, Zabbix server, Zabbix web, custom API (`/api/v1`) и dashboard.
 - `10051/TCP`: active agents и Zabbix proxies, только из разрешённых подсетей
   (bootstrap по умолчанию публикует trapper на `0.0.0.0` — ограничьте firewall/
   security group сетями agent/proxy);
-- `443/TCP`: custom portal после добавления Caddy;
-- `7080/TCP`: Zabbix UI, по умолчанию доступен с внешнего IP (`0.0.0.0`);
-- `7081/TCP`: dashboard, по умолчанию доступен с внешнего IP;
-- `7000/TCP`: custom API docs/health, по умолчанию доступен с внешнего IP;
+- `7080/TCP`: Zabbix UI HTTP, по умолчанию на `0.0.0.0`;
+- `7081/TCP`: dashboard HTTP, по умолчанию на `0.0.0.0`;
+- `7000/TCP`: custom API HTTP, по умолчанию на `0.0.0.0`;
+- `7443/TCP`: Zabbix UI HTTPS (edge, самоподписанный сертификат по IP);
+- `7444/TCP`: dashboard HTTPS;
+- `7445/TCP`: API HTTPS;
 - от VPS/proxy к устройствам: ICMP, `10050/TCP`, `161/UDP`, при необходимости
   `623/UDP` IPMI и vendor API ports.
+
+Доступ по локальному/VPN IP (`LOCAL_ACCESS_IP`, по умолчанию `100.10.10.66`)
+работает на тех же портах: сервисы слушают `0.0.0.0`. CORS и SAN сертификата
+включают этот адрес автоматически.
 
 ## Сеть Compose
 
@@ -116,6 +122,11 @@ ssh -L 7081:127.0.0.1:7081 -L 7000:127.0.0.1:7000 user@VPS_IP
 - OpenAPI UI: `http://127.0.0.1:7000/api/v1/docs`
 - Portal login: значения `BOOTSTRAP_ADMIN_*` из `.env`
 
+По локальному/VPN IP (пример `100.10.10.66`):
+
+- HTTP: `http://100.10.10.66:7080`, `:7081`, `:7000`
+- HTTPS: `https://100.10.10.66:7443`, `:7444`, `:7445` (принять самоподписанный сертификат)
+
 ## Проверка
 
 На VPS:
@@ -127,15 +138,19 @@ sudo docker compose logs --tail=100 zabbix-server
 curl -I http://127.0.0.1:7080
 curl -fsS http://127.0.0.1:7000/api/v1/health/live
 curl -fsS http://127.0.0.1:7081/api/v1/health/live
+curl -kI https://127.0.0.1:7443
+curl -kfsS https://127.0.0.1:7445/api/v1/health/live
+curl -kfsS https://127.0.0.1:7444/api/v1/health/live
 ```
 
-Ожидается: PostgreSQL/API `healthy`, Zabbix server/web — `Up`, HTTP-ответ от
-web и `{"status":"ok"}` от API.
+Ожидается: PostgreSQL/API/`edge` `healthy`, Zabbix server/web — `Up`, HTTP и
+HTTPS-ответы от web/API.
 
 ## Production hardening перед вводом
 
 - образы уже закреплены digest-ами; обновляйте их осознанно после staging;
-- установить Caddy и сертификат для custom portal;
+- самоподписанный TLS по IP подходит для VPN/лаборатории; для публичного домена
+  замените сертификат в `certs/` или поставьте Caddy/Let's Encrypt;
 - хранить master encryption key вне Compose `.env`;
 - закрыть `10051/TCP` allowlist-ом (не публиковать на `0.0.0.0` без необходимости);
 - подключить внешнее backup-хранилище;

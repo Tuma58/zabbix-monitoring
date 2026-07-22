@@ -10,6 +10,9 @@ CLAUDE.md
 *.log
 *.dump
 backups/
+certs/*
+!certs/.gitkeep
+
 __pycache__/
 *.py[cod]
 .pytest_cache/
