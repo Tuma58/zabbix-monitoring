@@ -251,33 +251,80 @@ wait_for_services() {
     done
     [[ "${api_status:-}" == "healthy" ]] || log "WARNING: API is not healthy yet; check: docker compose logs api"
   fi
-
-  compose ps
 }
 
 print_next_steps() {
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
-  log "Installation completed"
-  if [[ "${ZABBIX_WEB_BIND}" == "127.0.0.1" ]]; then
-    log "Zabbix UI is local-only. Use: ssh -L ${ZABBIX_WEB_PORT}:127.0.0.1:${ZABBIX_WEB_PORT} user@VPS_IP"
+
+  local zabbix_url dashboard_url api_url ssh_hint
+  if [[ "${ZABBIX_WEB_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
+    zabbix_url="http://127.0.0.1:${ZABBIX_WEB_PORT:-8080}"
   else
-    log "Zabbix UI: http://SERVER_IP:${ZABBIX_WEB_PORT} (configure firewall and TLS before production)"
+    zabbix_url="http://SERVER_IP:${ZABBIX_WEB_PORT:-8080}"
   fi
   if [[ "${DASHBOARD_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    log "Dashboard: ssh -L ${DASHBOARD_PORT:-8081}:127.0.0.1:${DASHBOARD_PORT:-8081} user@VPS_IP"
+    dashboard_url="http://127.0.0.1:${DASHBOARD_PORT:-8081}"
   else
-    log "Dashboard: http://SERVER_IP:${DASHBOARD_PORT:-8081}"
+    dashboard_url="http://SERVER_IP:${DASHBOARD_PORT:-8081}"
   fi
   if [[ "${API_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    log "API docs: ssh -L ${API_PORT:-8000}:127.0.0.1:${API_PORT:-8000} user@VPS_IP then http://127.0.0.1:${API_PORT:-8000}/api/v1/docs"
+    api_url="http://127.0.0.1:${API_PORT:-8000}/api/v1"
   else
-    log "API docs: http://SERVER_IP:${API_PORT:-8000}/api/v1/docs"
+    api_url="http://SERVER_IP:${API_PORT:-8000}/api/v1"
   fi
-  log "Portal login: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com} / (see BOOTSTRAP_ADMIN_PASSWORD in .env)"
-  log "Initial Zabbix login: Admin / zabbix. Change it immediately."
-  log "Trapper port ${ZABBIX_SERVER_PORT:-10051} is bound to ${ZABBIX_SERVER_BIND:-127.0.0.1}; open it only for agent/proxy networks."
+  ssh_hint="ssh -L ${ZABBIX_WEB_PORT:-8080}:127.0.0.1:${ZABBIX_WEB_PORT:-8080} -L ${DASHBOARD_PORT:-8081}:127.0.0.1:${DASHBOARD_PORT:-8081} -L ${API_PORT:-8000}:127.0.0.1:${API_PORT:-8000} user@VPS_IP"
+
+  printf '\n'
+  log "============================================================"
+  log " Installation completed"
+  log "============================================================"
+  printf '\n'
+  log "Service status:"
+  compose ps
+  printf '\n'
+  log "Access URLs:"
+  log "  Zabbix UI:  ${zabbix_url}"
+  log "  Dashboard:  ${dashboard_url}"
+  log "  API docs:   ${api_url}/docs"
+  log "  API live:   ${api_url}/health/live"
+  if [[ "${ZABBIX_WEB_BIND:-127.0.0.1}" == "127.0.0.1" \
+     || "${DASHBOARD_BIND:-127.0.0.1}" == "127.0.0.1" \
+     || "${API_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
+    log "  SSH tunnel (from your laptop):"
+    log "    ${ssh_hint}"
+  fi
+  printf '\n'
+  log "------------------------------------------------------------"
+  log " Secrets (store securely, then clear the terminal scrollback)"
+  log "------------------------------------------------------------"
+  log "  .env file:              ${ENV_FILE} (mode 0600)"
+  log "  PostgreSQL user:        ${POSTGRES_USER:-zabbix}"
+  log "  PostgreSQL password:    ${POSTGRES_PASSWORD}"
+  log "  Zabbix DB name:         ${POSTGRES_DB:-zabbix}"
+  log "  Portal DB name:         ${PORTAL_DB:-netmon}"
+  log "  Portal admin email:     ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
+  log "  Portal admin password:  ${BOOTSTRAP_ADMIN_PASSWORD}"
+  log "  JWT secret:             ${JWT_SECRET}"
+  log "  Secrets master key:     ${SECRETS_MASTER_KEY}"
+  log "  Zabbix UI login:        Admin"
+  log "  Zabbix UI password:     zabbix   (change immediately)"
+  printf '\n'
+  log "Network binds:"
+  log "  Zabbix web:   ${ZABBIX_WEB_BIND:-127.0.0.1}:${ZABBIX_WEB_PORT:-8080}"
+  log "  Dashboard:    ${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_PORT:-8081}"
+  log "  API:          ${API_BIND:-127.0.0.1}:${API_PORT:-8000}"
+  log "  Trapper:      ${ZABBIX_SERVER_BIND:-127.0.0.1}:${ZABBIX_SERVER_PORT:-10051}"
+  printf '\n'
+  log "Useful commands:"
+  log "  cd ${SCRIPT_DIR}"
+  log "  docker compose --env-file .env ps"
+  log "  docker compose --env-file .env logs -f api"
+  log "  curl -fsS ${api_url}/health/live"
+  printf '\n'
   log "Next: read ${SCRIPT_DIR}/docs/DEPLOYMENT.md"
+  log "============================================================"
+  printf '\n'
 }
 
 main() {
