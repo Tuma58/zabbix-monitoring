@@ -87,6 +87,12 @@ class Device(Base):
     name: Mapped[str] = mapped_column(String(255), index=True)
     address: Mapped[str] = mapped_column(String(255), index=True)
     device_type: Mapped[str] = mapped_column(String(64))
+    protocol: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    monitoring_subtype: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    credential_profile_id: Mapped[str | None] = mapped_column(
+        ForeignKey("credential_profiles.id"),
+        nullable=True,
+    )
     vendor: Mapped[str | None] = mapped_column(String(128), nullable=True)
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=DeviceStatus.DRAFT.value)

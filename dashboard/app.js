@@ -26,8 +26,10 @@
   let accessToken = localStorage.getItem(TOKEN_KEY) || '';
   let apiOnline = false;
   let sitesCache = [];
+  let credentialProfiles = [];
+  let selectedCredentialProfileId = '';
 
-  function icon(id) {
+  const NAV_SECTIONS = ['overview', 'devices', 'problems', 'sites'];
     return `<svg><use href="#${id}"/></svg>`;
   }
 
@@ -370,6 +372,7 @@
     renderDevices(devices, sitesById);
     renderSites(sites, devices);
     populateWizardSites(sites);
+    await loadCredentialProfiles();
     if (health.status !== 'ok') {
       setSyncState('Зависимости деградированы', false);
     }
@@ -406,6 +409,65 @@
     return map[deviceType] || 'Уточните тип / производителя';
   }
 
+  function syncNavFromHash() {
+    const hash = (window.location.hash || '#overview').replace('#', '');
+    const activeId = NAV_SECTIONS.includes(hash) ? hash : 'overview';
+    $$('.side-nav a[href^="#"]').forEach((link) => {
+      link.classList.toggle('active', link.getAttribute('href') === `#${activeId}`);
+    });
+  }
+
+  async function loadCredentialProfiles() {
+    if (!accessToken || !apiOnline) return;
+    try {
+      credentialProfiles = await api('/credentials');
+      populateCredentialProfiles();
+    } catch {
+      credentialProfiles = [];
+    }
+  }
+
+  function populateCredentialProfiles(selectedId = selectedCredentialProfileId) {
+    const select = $('#credentialProfile');
+    if (!select) return;
+    if (!credentialProfiles.length) {
+      select.innerHTML = '<option value="">Профиль будет создан автоматически</option>';
+      selectedCredentialProfileId = '';
+      return;
+    }
+    select.innerHTML = credentialProfiles.map((profile) =>
+      `<option value="${escapeHtml(profile.id)}"${profile.id === selectedId ? ' selected' : ''}>${escapeHtml(profile.name)}</option>`,
+    ).join('');
+    selectedCredentialProfileId = select.value || credentialProfiles[0]?.id || '';
+  }
+
+  async function ensureMonitoringProfile() {
+    if (!accessToken || !apiOnline) return null;
+    const deviceType = $('#deviceType')?.value;
+    const protocol = $('input[name="protocol"]:checked')?.value;
+    if (!deviceType || !protocol) return null;
+    const subtype = $('#guideSubtype')?.value || null;
+    try {
+      const result = await api('/credentials/ensure', {
+        method: 'POST',
+        body: {
+          device_type: deviceType,
+          monitoring_subtype: subtype,
+          protocol,
+        },
+      });
+      selectedCredentialProfileId = result.profile.id;
+      if (!credentialProfiles.some((item) => item.id === result.profile.id)) {
+        credentialProfiles.push(result.profile);
+      }
+      populateCredentialProfiles(result.profile.id);
+      return result;
+    } catch (error) {
+      showToast(error.message || 'Не удалось подобрать профиль');
+      return null;
+    }
+  }
+
   function updateConnectionGuide() {
     const guides = window.NetmonConnectionGuides;
     if (!guides) return;
@@ -428,6 +490,7 @@
     }
 
     guides.renderGuide($('#connectionGuideContent'), deviceType, subtype, protocol);
+    ensureMonitoringProfile();
   }
 
   function applySuggestedProtocol(deviceType) {
@@ -456,6 +519,7 @@
     $$('.field input, .field select', form).forEach((field) => field.classList.remove('invalid'));
     applySuggestedProtocol($('#deviceType')?.value || '');
     updateConnectionGuide();
+    populateCredentialProfiles();
     renderStep();
   }
 
@@ -662,10 +726,17 @@
           name,
           address,
           device_type: typeValue,
+          protocol: $('input[name="protocol"]:checked').value,
+          monitoring_subtype: $('#guideSubtype')?.value || null,
+          credential_profile_id: selectedCredentialProfileId || $('#credentialProfile')?.value || null,
+          auto_provision: $('#startMonitoring')?.checked !== false,
         },
       });
       closeDialog(wizard);
-      showToast(`${name} добавлено в инвентарь портала`);
+      const provisionNote = $('#startMonitoring')?.checked !== false
+        ? ' и отправлено в Zabbix (если API включён)'
+        : '';
+      showToast(`${name} добавлено в инвентарь портала${provisionNote}`);
       await refreshDashboard();
     } catch (error) {
       showToast(error.message || 'Не удалось создать устройство');
@@ -710,6 +781,14 @@
     updateConnectionGuide();
   });
   $('#guideSubtype')?.addEventListener('change', updateConnectionGuide);
+  $('#refreshCredentialProfile')?.addEventListener('click', () => {
+    ensureMonitoringProfile().then((result) => {
+      if (result) showToast(`Профиль «${result.profile.name}» готов`);
+    });
+  });
+  $('#credentialProfile')?.addEventListener('change', (event) => {
+    selectedCredentialProfileId = event.target.value;
+  });
   nextButton.addEventListener('click', advance);
   backButton.addEventListener('click', () => { if (currentStep > 1) { currentStep -= 1; renderStep(); } });
 
@@ -732,7 +811,11 @@
   $('#menuButton').addEventListener('click', () => body.classList.add('nav-open'));
   $('#sidebarClose').addEventListener('click', () => body.classList.remove('nav-open'));
   $('#sidebarScrim').addEventListener('click', () => body.classList.remove('nav-open'));
-  $$('.side-nav a').forEach((link) => link.addEventListener('click', () => body.classList.remove('nav-open')));
+  $$('.side-nav a').forEach((link) => link.addEventListener('click', () => {
+    body.classList.remove('nav-open');
+    syncNavFromHash();
+  }));
+  window.addEventListener('hashchange', syncNavFromHash);
 
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -745,4 +828,5 @@
     setFooter('Не удалось загрузить API');
     showToast(error.message || 'Ошибка загрузки dashboard');
   });
+  syncNavFromHash();
 })();

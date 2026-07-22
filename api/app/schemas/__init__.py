@@ -71,8 +71,12 @@ class DeviceCreate(APIModel):
     name: str = Field(min_length=1, max_length=255)
     address: str = Field(min_length=1, max_length=255)
     device_type: str = Field(min_length=1, max_length=64)
+    protocol: str | None = None
+    monitoring_subtype: str | None = None
+    credential_profile_id: str | None = None
     vendor: str | None = None
     model: str | None = None
+    auto_provision: bool = True
 
 
 class DeviceOut(APIModel):
@@ -82,10 +86,14 @@ class DeviceOut(APIModel):
     name: str
     address: str
     device_type: str
+    protocol: str | None = None
+    monitoring_subtype: str | None = None
+    credential_profile_id: str | None = None
     vendor: str | None
     model: str | None
     status: str
     version: int
+    provision: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProblemAckRequest(APIModel):
@@ -138,6 +146,29 @@ class CredentialProfileOut(APIModel):
     profile_type: str
     key_version: int
     public: dict[str, Any]
+
+
+class CredentialEnsureRequest(APIModel):
+    device_type: str = Field(min_length=1, max_length=64)
+    monitoring_subtype: str | None = None
+    protocol: str = Field(min_length=1, max_length=64)
+
+
+class CredentialEnsureResponse(APIModel):
+    profile: CredentialProfileOut
+    catalog_key: str
+    zabbix_templates: list[str]
+
+
+class MonitoringCatalogEntry(APIModel):
+    key: str
+    name: str
+    profile_type: str
+    zabbix_templates: list[str]
+    interface: str
+    device_type: str | None = None
+    subtype: str | None = None
+    protocol: str | None = None
 
 
 class OperationOut(APIModel):

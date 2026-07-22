@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     zabbix_api_password: str = ""
     zabbix_api_timeout_seconds: float = 10.0
     zabbix_enabled: bool = False
+    zabbix_default_hostgroup: str = "NetMon"
+    zabbix_default_snmpv3_user: str = "zabbix-monitor"
+    zabbix_default_snmpv3_auth_pass: str = ""
+    zabbix_default_snmpv3_priv_pass: str = ""
+    zabbix_default_agent_psk_identity: str = "netmon-agent"
+    zabbix_default_agent_psk: str = ""
 
     cors_origins: str = "http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.66:7081,https://100.10.10.66:7444,http://localhost:7081"
     probe_network_allowlist: str = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"

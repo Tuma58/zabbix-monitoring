@@ -244,10 +244,10 @@
                 </div>
               </div>
               <div class="form-grid two connection-fields">
-                <label class="field"><span>Профиль подключения</span><select id="credentialProfile"><option>SNMP Core · authPriv</option><option>SNMP UPS · authPriv</option><option>Agent PSK · office</option></select><small>Секреты хранятся зашифрованно</small></label>
+                <label class="field"><span>Профиль подключения</span><select id="credentialProfile"><option value="">Будет создан автоматически</option></select><small>Подбирается по типу устройства и протоколу</small></label>
                 <label class="field"><span>Zabbix proxy</span><select id="proxy"><option value="">По умолчанию (сервер)</option></select><small>Оставьте пустым для прямого подключения к Zabbix server</small></label>
               </div>
-              <button type="button" class="text-button add-profile" data-toast="Создание профиля будет доступно администратору"><svg><use href="#i-plus"/></svg>Создать новый профиль</button>
+              <button type="button" class="text-button add-profile" id="refreshCredentialProfile"><svg><use href="#i-refresh"/></svg>Обновить профиль для выбранного типа</button>
             </section>
 
             <section class="wizard-page" data-step="3">

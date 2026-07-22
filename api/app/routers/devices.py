@@ -3,17 +3,18 @@ import json
 from fastapi import APIRouter, Header, Request
 from sqlalchemy import select
 
-from app.deps import AppSettings, DbSession, OperatorUser, ViewerUser
+from app.deps import AppSettings, DbSession, Gateway, OperatorUser, Secrets, ViewerUser
 from app.errors import AppError, not_found
 from app.models import Device, DeviceStatus, Operation, OperationState, Site
 from app.schemas import DeviceCreate, DeviceOut, OperationOut, ProbeRequest
 from app.services.audit import record_audit
 from app.services.ssrf import assert_probe_target_allowed
+from app.services.zabbix_provisioner import provision_portal_device
 
 router = APIRouter()
 
 
-def _device_out(device: Device) -> DeviceOut:
+def _device_out(device: Device, provision: dict | None = None) -> DeviceOut:
     return DeviceOut(
         id=device.id,
         site_id=device.site_id,
@@ -21,10 +22,14 @@ def _device_out(device: Device) -> DeviceOut:
         name=device.name,
         address=device.address,
         device_type=device.device_type,
+        protocol=device.protocol,
+        monitoring_subtype=device.monitoring_subtype,
+        credential_profile_id=device.credential_profile_id,
         vendor=device.vendor,
         model=device.model,
         status=device.status,
         version=device.version,
+        provision=provision or {},
     )
 
 
@@ -35,7 +40,15 @@ def list_devices(_: ViewerUser, db: DbSession) -> list[DeviceOut]:
 
 
 @router.post("", response_model=DeviceOut, status_code=201)
-def create_device(payload: DeviceCreate, request: Request, user: OperatorUser, db: DbSession) -> DeviceOut:
+async def create_device(
+    payload: DeviceCreate,
+    request: Request,
+    user: OperatorUser,
+    db: DbSession,
+    settings: AppSettings,
+    gateway: Gateway,
+    secrets: Secrets,
+) -> DeviceOut:
     site = db.get(Site, payload.site_id)
     if site is None:
         raise not_found("Site not found")
@@ -59,6 +72,22 @@ def create_device(payload: DeviceCreate, request: Request, user: OperatorUser, d
     )
     db.add(device)
     db.flush()
+
+    protocol = payload.protocol or "SNMPv3"
+    provision_result = await provision_portal_device(
+        db,
+        gateway,
+        secrets,
+        settings,
+        device,
+        site,
+        device_type=payload.device_type,
+        monitoring_subtype=payload.monitoring_subtype,
+        protocol=protocol,
+        auto_provision=payload.auto_provision,
+        credential_profile_id=payload.credential_profile_id,
+    )
+
     record_audit(
         db,
         actor_id=user.id,
@@ -67,11 +96,16 @@ def create_device(payload: DeviceCreate, request: Request, user: OperatorUser, d
         target_id=device.id,
         request_id=getattr(request.state, "request_id", None),
         ip=request.client.host if request.client else None,
-        diff={"name": device.name, "address": device.address},
+        diff={
+            "name": device.name,
+            "address": device.address,
+            "protocol": protocol,
+            "zabbix_provisioned": provision_result.get("zabbix_provisioned", False),
+        },
     )
     db.commit()
     db.refresh(device)
-    return _device_out(device)
+    return _device_out(device, provision_result)
 
 
 @router.get("/{device_id}", response_model=DeviceOut)

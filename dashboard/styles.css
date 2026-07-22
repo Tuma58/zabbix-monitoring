@@ -325,31 +325,31 @@ dialog::backdrop { background: rgba(35,42,45,.37); backdrop-filter: blur(8px); a
   background: rgba(250,248,245,.96);
   backdrop-filter: blur(6px);
 }
-.guide-frame-head h4 { margin: 6px 0 4px; font-size: 11px; letter-spacing: -.01em; }
-.guide-template { margin: 0; color: var(--ink-soft); font-size: 7px; }
+.guide-frame-head h4 { margin: 6px 0 4px; font-size: 15px; letter-spacing: -.01em; }
+.guide-template { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.45; }
 .guide-template em { color: var(--indigo); font-style: normal; font-weight: 700; }
 .guide-badge {
   display: inline-block;
-  padding: 3px 7px;
+  padding: 4px 8px;
   color: var(--indigo);
   border-radius: 6px;
   background: rgba(91,123,154,.1);
-  font-size: 6px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-.guide-frame-body { padding: 12px 16px 16px; color: var(--ink-soft); font-size: 8px; line-height: 1.55; }
-.guide-frame-body p { margin: 0 0 10px; }
+.guide-frame-body { padding: 14px 16px 18px; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.guide-frame-body p { margin: 0 0 12px; }
 .guide-frame-body code {
-  padding: 1px 4px;
+  padding: 2px 6px;
   border-radius: 4px;
   background: rgba(45,52,54,.06);
-  font-size: 7px;
+  font-size: 12px;
   word-break: break-all;
 }
-.guide-steps { margin: 0 0 12px; padding-left: 18px; }
-.guide-steps li { margin-bottom: 8px; }
+.guide-steps { margin: 0 0 14px; padding-left: 22px; }
+.guide-steps li { margin-bottom: 10px; }
 .guide-steps li:last-child { margin-bottom: 0; }
 .guide-links { margin: 0; padding-left: 16px; list-style: disc; }
 .guide-links a { color: var(--indigo); font-weight: 700; text-decoration: none; }
