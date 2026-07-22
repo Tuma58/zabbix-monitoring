@@ -42,13 +42,22 @@ Dashboard автоматически входит в portal API с учётно�
 | Сетевое оборудование | MikroTik, Keenetic, Cisco, D-Link, TP-Link, HP/Aruba |
 | ИБП | APC, Eaton/IPPON, CyberPower, прочие SNMP |
 
-В фрейме: пошаговая настройка, рекомендуемый шаблон Zabbix, ссылки на
-[агенты](https://www.zabbix.com/download_agents) и документацию. Протокол
-подбирается автоматически (agent2 для ОС, SNMPv3 для сети и ИБП).
+В фрейме: подробная пошаговая настройка, рекомендуемый шаблон Zabbix,
+скачивание агентов и YAML-шаблонов **с локального зеркала dashboard**:
 
-> **Stage 1:** мастер регистрирует устройство в БД портала (`netmon`). Автоматическое
-> создание host в Zabbix — следующий этап. Для реального мониторинга Windows
-> настройте agent и host в Zabbix UI (ниже).
+- агенты и скрипты: `/agents/` (см. `/agents/README.md`)
+- шаблоны YAML: `/templates/` (см. `/templates/README.md`)
+
+Протокол подбирается автоматически (agent2 для ОС, SNMPv3 для сети и ИБП).
+
+Обновить зеркало агентов на сервере:
+
+```bash
+sudo ./scripts/fetch-zabbix-assets.sh
+```
+
+> Мастер регистрирует устройство в БД портала и при включённом Zabbix API
+> создаёт host. Для Windows/Linux сначала установите agent по инструкции шага 2.
 
 ## Подключение Windows-сервера (Zabbix agent2)
 
