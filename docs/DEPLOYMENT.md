@@ -38,22 +38,36 @@ trapper через опубликованный порт хоста, а не ч�
 
 ## Однокомандная установка
 
-Для чистого Ubuntu 22.04/24.04 VPS:
+Для чистого Ubuntu 22.04/24.04 VPS (повторный запуск безопасен, если
+`/opt/netmon` уже существует):
 
 ```bash
-sudo apt-get update && sudo apt-get install -y git && sudo git clone https://github.com/Tuma58/zabbix-monitoring.git /opt/netmon && sudo /opt/netmon/install.sh
-```
-
-Если репозиторий уже загружен в `/opt/netmon`:
-
-```bash
+sudo apt-get update && sudo apt-get install -y git && \
+sudo mkdir -p /opt/netmon && \
+if [ -d /opt/netmon/.git ]; then
+  sudo git -C /opt/netmon fetch --prune origin &&
+  sudo git -C /opt/netmon checkout zabbix-monitoring &&
+  sudo git -C /opt/netmon pull --ff-only origin zabbix-monitoring
+else
+  sudo rm -rf /opt/netmon &&
+  sudo git clone -b zabbix-monitoring https://github.com/Tuma58/zabbix-monitoring.git /opt/netmon
+fi && \
 sudo /opt/netmon/install.sh
 ```
 
-Для установки конкретной ветки (например PR):
+Если репозиторий уже на месте и нужно только поднять/обновить стек:
 
 ```bash
-sudo git clone -b cursor/stage1-platform-foundation-6c05 https://github.com/Tuma58/zabbix-monitoring.git /opt/netmon && sudo /opt/netmon/install.sh
+cd /opt/netmon && sudo git pull --ff-only && sudo ./install.sh
+```
+
+Для установки конкретной feature-ветки:
+
+```bash
+sudo git -C /opt/netmon fetch origin && \
+sudo git -C /opt/netmon checkout cursor/stage1-platform-foundation-6c05 && \
+sudo git -C /opt/netmon pull --ff-only && \
+sudo /opt/netmon/install.sh
 ```
 
 Скрипт идемпотентен для повторного запуска: существующий `.env` и пароль БД не
