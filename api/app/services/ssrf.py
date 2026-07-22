@@ -29,6 +29,6 @@ def assert_probe_target_allowed(address: str, allowlist_cidrs: Iterable[str]) ->
     networks = [ipaddress.ip_network(cidr, strict=False) for cidr in allowlist_cidrs]
     if not any(ip in network for network in networks):
         raise validation_failed(
-            "Адрес вне разрешённых сетей. Используйте частный IP (10/8, 172.16/12, 192.168/16) или добавьте сеть в PROBE_NETWORK_ALLOWLIST.",
+            "Адрес вне разрешённых сетей. Разрешены частные сети и сети из PROBE_NETWORK_ALLOWLIST.",
             details={"address": address, "allowlist": list(allowlist_cidrs)},
         )

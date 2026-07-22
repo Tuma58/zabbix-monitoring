@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     zabbix_default_agent_psk: str = ""
 
     cors_origins: str = "http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.66:7081,https://100.10.10.66:7444,http://localhost:7081"
-    probe_network_allowlist: str = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    probe_network_allowlist: str = "10.0.0.0/8,100.64.0.0/10,172.16.0.0/12,192.168.0.0/16"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
