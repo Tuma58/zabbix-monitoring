@@ -323,36 +323,36 @@ start_stack() {
   wait_for_postgres
   ensure_portal_database
   if ! compose up -d --remove-orphans; then
-    log "Сбой запуска (вероятно iptables/сеть Docker); перезапуск Docker и повтор"
-    reset_docker_networking
+    log "Сбой запуска (остаточные контейнеры/сеть Docker); полная очистка и повтор"
+    cleanup_stale_stack
+    compose up -d postgres
+    wait_for_postgres
+    ensure_portal_database
     compose up -d --remove-orphans \
       || fail "Не удалось запустить стек; смотрите: docker compose logs"
   fi
 }
 
-# Пересоздаёт сетевой стек Docker после ошибок iptables (DOCKER-FORWARD и т.п.).
-reset_docker_networking() {
+# Удаляет остаточные контейнеры и сети от прежних запусков (в т.ч. старую
+# сеть netmon_backend с подчёркиванием), сохраняя тома с данными.
+cleanup_stale_stack() {
+  log "Очистка остаточных контейнеров и сетей NetMon (тома сохраняются)"
   compose down --remove-orphans >/dev/null 2>&1 || true
-  docker network rm netmon-backend >/dev/null 2>&1 || true
+
+  # Принудительно удаляем любые контейнеры проекта netmon.
+  local stale
+  stale="$(docker ps -aq --filter 'name=netmon-' 2>/dev/null || true)"
+  if [[ -n "${stale}" ]]; then
+    docker rm -f ${stale} >/dev/null 2>&1 || true
+  fi
+
+  # Сносим возможные старые/битые сети (текущая netmon-backend пересоздастся).
+  docker network rm netmon_backend netmon-backend netmon-monitoring netmon_monitoring >/dev/null 2>&1 || true
+
   if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
     systemctl restart docker || true
     sleep 3
-  else
-    if pgrep -x dockerd >/dev/null 2>&1; then
-      pkill -x dockerd || true
-      sleep 2
-    fi
-    dockerd --host=unix:///var/run/docker.sock >/var/log/dockerd.log 2>&1 &
-    local attempts=0
-    while (( attempts < 30 )); do
-      docker info >/dev/null 2>&1 && break
-      attempts=$((attempts + 1))
-      sleep 1
-    done
   fi
-  compose up -d postgres >/dev/null 2>&1 || true
-  wait_for_postgres
-  ensure_portal_database
 }
 
 wait_for_postgres() {
