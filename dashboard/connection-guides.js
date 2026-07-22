@@ -126,13 +126,24 @@
     return serverHost();
   }
 
+  function monitorIps() {
+    const current = host();
+    const known = ['100.10.10.66', '94.181.181.43'];
+    const list = [current, ...known.filter((ip) => ip !== current)];
+    return [...new Set(list.filter(Boolean))];
+  }
+
   function agentConfSnippet(hostnameHint) {
+    const ips = monitorIps();
+    const primary = ips[0];
     return pre(
-      `Server=${host()}\n`
-      + `ServerActive=${host()}\n`
+      `Server=${ips.join(',')}\n`
+      + `ServerActive=${primary}\n`
       + `Hostname=${hostnameHint}\n`
       + `# ListenPort=10050\n`
-      + `# Timeout=10`,
+      + `# Timeout=10\n`
+      + `# Важно: Hostname должен совпасть с Host name в Zabbix.\n`
+      + `# ServerActive — адрес, куда агент сам шлёт данные (TCP 10051).`,
     );
   }
 

@@ -52,8 +52,8 @@ services:
     # the published trapper port on the host instead.
     networks:
       - backend
-    security_opt:
-      - no-new-privileges:true
+    # fping is setuid root; no-new-privileges blocks ICMP simple checks
+    # ("can't create socket (must run as root?)"). Keep NET_RAW only.
     stop_grace_period: 30s
 
   zabbix-web:
