@@ -60,7 +60,7 @@
             <code>ServerActive=${serverHost()}</code><br>
             <code>Hostname=</code>уникальное имя (как в Zabbix host).`,
           'Перезапустите службу <strong>Zabbix Agent 2</strong>. Разрешите исходящий TCP <code>10051</code> в firewall.',
-          `В Zabbix UI (${link('#', 'Monitoring → Hosts')}) создайте host с тем же <code>Hostname</code>, шаблон <em>Windows by Zabbix agent active</em>.`,
+          `В Zabbix UI (<strong>Data collection → Hosts</strong>) создайте host с тем же <code>Hostname</code>, шаблон <em>Windows by Zabbix agent active</em>.`,
           'Passive checks (опционально): откройте входящий <code>10050/TCP</code> на Windows и добавьте Agent interface в host.',
         ])}
         ${links([
