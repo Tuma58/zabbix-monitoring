@@ -138,6 +138,44 @@ compose() {
     --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+# Дозаполняет обязательные переменные в уже существующем .env (старые установки).
+ensure_required_env_vars() {
+  [[ -f "${ENV_FILE}" ]] || return 0
+
+  ensure_env_default() {
+    local key="$1"
+    local value="$2"
+    if grep -q "^${key}=" "${ENV_FILE}"; then
+      # Пустое значение тоже считаем отсутствующим.
+      if grep -q "^${key}=$" "${ENV_FILE}" || grep -q "^${key}=[[:space:]]*$" "${ENV_FILE}"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "${ENV_FILE}"
+        log "Обновлена пустая переменная ${key}"
+      fi
+    else
+      printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+      log "Добавлена отсутствующая переменная ${key}"
+    fi
+  }
+
+  ensure_env_default "JWT_SECRET" "$(random_secret)"
+  ensure_env_default "SECRETS_MASTER_KEY" "$(random_secret)"
+  ensure_env_default "PORTAL_DB" "netmon"
+  ensure_env_default "BOOTSTRAP_ADMIN_EMAIL" "admin@example.com"
+  ensure_env_default "BOOTSTRAP_ADMIN_PASSWORD" "ChangeMeNow!"
+  ensure_env_default "ZABBIX_ENABLED" "false"
+  ensure_env_default "ZABBIX_API_URL" "http://zabbix-web:8080/api_jsonrpc.php"
+  ensure_env_default "API_BIND" "0.0.0.0"
+  ensure_env_default "API_PORT" "8000"
+  ensure_env_default "DASHBOARD_BIND" "0.0.0.0"
+  ensure_env_default "DASHBOARD_PORT" "8081"
+  ensure_env_default "ZABBIX_WEB_BIND" "0.0.0.0"
+  ensure_env_default "ZABBIX_WEB_PORT" "8080"
+  ensure_env_default "ZABBIX_SERVER_BIND" "0.0.0.0"
+  ensure_env_default "ZABBIX_SERVER_PORT" "10051"
+  ensure_env_default "PHP_TZ" "Europe/Moscow"
+  chmod 600 "${ENV_FILE}"
+}
+
 # Веб-интерфейсы по умолчанию слушаются на всех интерфейсах (внешний IP VPS).
 ensure_public_web_binds() {
   [[ -f "${ENV_FILE}" ]] || return 0
@@ -163,6 +201,11 @@ ensure_public_web_binds() {
     sed -i 's/^API_BIND=127.0.0.1$/API_BIND=0.0.0.0/' "${ENV_FILE}"
     log "API_BIND переключён на 0.0.0.0 (доступ с внешнего IP)"
   fi
+  # На случай, если API_BIND вовсе отсутствует (старый .env) — уже добавлен выше,
+  # но если был только ZABBIX/DASHBOARD — API мог остаться без строки.
+  if ! grep -q '^API_BIND=' "${ENV_FILE}"; then
+    printf 'API_BIND=0.0.0.0\n' >> "${ENV_FILE}"
+  fi
 
   # CORS для dashboard/API с внешнего IP.
   local cors_value
@@ -179,6 +222,7 @@ create_environment() {
   if [[ -f "${ENV_FILE}" ]]; then
     log "Сохранён существующий ${ENV_FILE} и его секреты"
     chmod 600 "${ENV_FILE}"
+    ensure_required_env_vars
     ensure_public_web_binds
     return
   fi

@@ -48,19 +48,15 @@ cd /opt/netmon && sudo git pull --ff-only && sudo ./install.sh
 на `0.0.0.0` и доступны по внешнему IP VPS. После установки скрипт печатает
 точные URL и секреты.
 
-```bash
-ssh -L 8080:127.0.0.1:8080 -L 8081:127.0.0.1:8081 -L 8000:127.0.0.1:8000 user@VPS_IP
-```
+- Zabbix UI: `http://VPS_IP:8080` (`Admin` / `zabbix`, смените пароль);
+- Dashboard: `http://VPS_IP:8081`;
+- API docs: `http://VPS_IP:8000/api/v1/docs`.
 
-- Zabbix UI: `http://127.0.0.1:8080` (`Admin` / `zabbix`, смените пароль);
-- Dashboard: `http://127.0.0.1:8081`;
-- API docs: `http://127.0.0.1:8000/api/v1/docs`.
-
-Учётная запись портала по умолчанию задаётся в `.env`
+Учётная запись портала задаётся в `.env`
 (`BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`).
 
-Порт trapper `10051` по умолчанию тоже на loopback. Открывайте его только для
-сетей agent/proxy (firewall / `DOCKER-USER`).
+Порт trapper `10051` тоже публикуется наружу — ограничьте его firewall allowlist-ом
+для сетей agent/proxy.
 
 ## Локальная разработка API
 
