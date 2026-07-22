@@ -73,6 +73,11 @@ random_secret() {
   openssl rand -hex 32
 }
 
+compose() {
+  docker compose --project-directory "${SCRIPT_DIR}" \
+    --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+}
+
 create_environment() {
   if [[ -f "${ENV_FILE}" ]]; then
     log "Keeping existing ${ENV_FILE} and its secrets"
@@ -80,60 +85,122 @@ create_environment() {
     return
   fi
 
-  local db_password
+  local db_password jwt_secret secrets_key
   db_password="$(random_secret)"
+  jwt_secret="$(random_secret)"
+  secrets_key="$(random_secret)"
 
   umask 077
   {
-    printf 'ZABBIX_VERSION=7.0-alpine-latest\n'
-    printf 'POSTGRES_VERSION=16-alpine\n'
+    printf 'ZABBIX_VERSION=alpine-7.0.28\n'
+    printf 'POSTGRES_VERSION=16.6-alpine\n'
     printf 'POSTGRES_DB=zabbix\n'
+    printf 'PORTAL_DB=netmon\n'
     printf 'POSTGRES_USER=zabbix\n'
     printf 'POSTGRES_PASSWORD=%s\n' "${db_password}"
+    printf 'JWT_SECRET=%s\n' "${jwt_secret}"
+    printf 'SECRETS_MASTER_KEY=%s\n' "${secrets_key}"
+    printf 'BOOTSTRAP_ADMIN_EMAIL=%s\n' "${BOOTSTRAP_ADMIN_EMAIL:-admin@netmon.local}"
+    printf 'BOOTSTRAP_ADMIN_PASSWORD=%s\n' "${BOOTSTRAP_ADMIN_PASSWORD:-ChangeMeNow!}"
+    printf 'ZABBIX_ENABLED=%s\n' "${ZABBIX_ENABLED:-false}"
+    printf 'ZABBIX_API_URL=%s\n' "${ZABBIX_API_URL:-http://zabbix-web:8080/api_jsonrpc.php}"
+    printf 'ZABBIX_API_USER=%s\n' "${ZABBIX_API_USER:-}"
+    printf 'ZABBIX_API_PASSWORD=%s\n' "${ZABBIX_API_PASSWORD:-}"
     printf 'PHP_TZ=%s\n' "${PHP_TZ:-Europe/Moscow}"
     printf 'ZABBIX_WEB_BIND=%s\n' "${ZABBIX_WEB_BIND:-127.0.0.1}"
     printf 'ZABBIX_WEB_PORT=%s\n' "${ZABBIX_WEB_PORT:-8080}"
+    printf 'ZABBIX_SERVER_BIND=%s\n' "${ZABBIX_SERVER_BIND:-127.0.0.1}"
     printf 'ZABBIX_SERVER_PORT=%s\n' "${ZABBIX_SERVER_PORT:-10051}"
     printf 'DASHBOARD_BIND=%s\n' "${DASHBOARD_BIND:-127.0.0.1}"
     printf 'DASHBOARD_PORT=%s\n' "${DASHBOARD_PORT:-8081}"
+    printf 'API_BIND=%s\n' "${API_BIND:-127.0.0.1}"
+    printf 'API_PORT=%s\n' "${API_PORT:-8000}"
+    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://127.0.0.1:8081,http://localhost:8081}"
+    printf 'PROBE_NETWORK_ALLOWLIST=%s\n' "${PROBE_NETWORK_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
     printf 'ZBX_CACHESIZE=128M\n'
     printf 'ZBX_HISTORYCACHESIZE=64M\n'
     printf 'ZBX_TRENDCACHESIZE=32M\n'
     printf 'ZBX_VALUECACHESIZE=128M\n'
   } > "${ENV_FILE}"
   chmod 600 "${ENV_FILE}"
-  log "Created ${ENV_FILE} with a random database password"
+  log "Created ${ENV_FILE} with random database and API secrets"
+}
+
+ensure_portal_database() {
+  local postgres_id portal_db
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  portal_db="${PORTAL_DB:-netmon}"
+  postgres_id="$(compose ps -q postgres)"
+  [[ -n "${postgres_id}" ]] || fail "PostgreSQL container is not running"
+  # Safe for existing volumes created before portal DB support.
+  if docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" -e PGUSER="${POSTGRES_USER:-zabbix}" \
+    "${postgres_id}" \
+    psql -d postgres -Atc "SELECT 1 FROM pg_database WHERE datname='${portal_db}'" | grep -q 1; then
+    log "Portal database ${portal_db} already exists"
+  else
+    log "Creating portal database ${portal_db}"
+    docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" -e PGUSER="${POSTGRES_USER:-zabbix}" \
+      "${postgres_id}" \
+      psql -d postgres -c "CREATE DATABASE ${portal_db}"
+  fi
 }
 
 start_stack() {
   [[ -f "${COMPOSE_FILE}" ]] || fail "Missing ${COMPOSE_FILE}; deploy the complete repository"
   log "Validating Docker Compose configuration"
-  docker compose --project-directory "${SCRIPT_DIR}" \
-    --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config --quiet
+  compose config --quiet
 
-  log "Downloading images and starting the base monitoring stack"
-  docker compose --project-directory "${SCRIPT_DIR}" \
-    --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
-  docker compose --project-directory "${SCRIPT_DIR}" \
-    --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans
+  log "Building API image and starting the monitoring stack"
+  compose pull || true
+  compose build api
+  compose up -d postgres
+  wait_for_postgres
+  ensure_portal_database
+  compose up -d --remove-orphans
 }
 
-wait_for_services() {
+wait_for_postgres() {
   local attempts=0
-  local postgres_status
+  local postgres_id
+  local postgres_status=""
+
+  postgres_id="$(compose ps -q postgres)"
+  [[ -n "${postgres_id}" ]] || fail "PostgreSQL container was not created"
+
   while (( attempts < 30 )); do
-    postgres_status="$(docker inspect --format '{{.State.Health.Status}}' netmon-postgres-1 2>/dev/null || true)"
+    postgres_status="$(docker inspect --format '{{.State.Health.Status}}' "${postgres_id}" 2>/dev/null || true)"
     if [[ "${postgres_status}" == "healthy" ]]; then
       log "PostgreSQL is healthy"
-      break
+      return
     fi
     attempts=$((attempts + 1))
     sleep 2
   done
-  [[ "${postgres_status:-}" == "healthy" ]] || fail "PostgreSQL did not become healthy; inspect docker compose logs"
+  fail "PostgreSQL did not become healthy; inspect docker compose logs"
+}
 
-  docker compose --project-directory "${SCRIPT_DIR}" \
-    --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps
+wait_for_services() {
+  local attempts=0
+  local api_id api_status=""
+
+  wait_for_postgres
+
+  api_id="$(compose ps -q api)"
+  if [[ -n "${api_id}" ]]; then
+    while (( attempts < 45 )); do
+      api_status="$(docker inspect --format '{{.State.Health.Status}}' "${api_id}" 2>/dev/null || true)"
+      if [[ "${api_status}" == "healthy" ]]; then
+        log "Custom API is healthy"
+        break
+      fi
+      attempts=$((attempts + 1))
+      sleep 2
+    done
+    [[ "${api_status:-}" == "healthy" ]] || log "WARNING: API is not healthy yet; check: docker compose logs api"
+  fi
+
+  compose ps
 }
 
 print_next_steps() {
@@ -146,11 +213,18 @@ print_next_steps() {
     log "Zabbix UI: http://SERVER_IP:${ZABBIX_WEB_PORT} (configure firewall and TLS before production)"
   fi
   if [[ "${DASHBOARD_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    log "Dashboard preview: ssh -L ${DASHBOARD_PORT:-8081}:127.0.0.1:${DASHBOARD_PORT:-8081} user@VPS_IP"
+    log "Dashboard: ssh -L ${DASHBOARD_PORT:-8081}:127.0.0.1:${DASHBOARD_PORT:-8081} user@VPS_IP"
   else
-    log "Dashboard preview: http://SERVER_IP:${DASHBOARD_PORT:-8081}"
+    log "Dashboard: http://SERVER_IP:${DASHBOARD_PORT:-8081}"
   fi
+  if [[ "${API_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
+    log "API docs: ssh -L ${API_PORT:-8000}:127.0.0.1:${API_PORT:-8000} user@VPS_IP then http://127.0.0.1:${API_PORT:-8000}/api/v1/docs"
+  else
+    log "API docs: http://SERVER_IP:${API_PORT:-8000}/api/v1/docs"
+  fi
+  log "Portal login: ${BOOTSTRAP_ADMIN_EMAIL:-admin@netmon.local} / (see BOOTSTRAP_ADMIN_PASSWORD in .env)"
   log "Initial Zabbix login: Admin / zabbix. Change it immediately."
+  log "Trapper port ${ZABBIX_SERVER_PORT:-10051} is bound to ${ZABBIX_SERVER_BIND:-127.0.0.1}; open it only for agent/proxy networks."
   log "Next: read ${SCRIPT_DIR}/docs/DEPLOYMENT.md"
 }
 

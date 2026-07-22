@@ -4,6 +4,9 @@
 ошибка содержит стабильный `code`, человекочитаемый `message`, `request_id` и
 опциональные `details`.
 
+Машинночитаемый контракт Stage 1: [`docs/openapi.json`](openapi.json)
+(генерируется из FastAPI).
+
 ## Общие правила
 
 - bearer token или защищённая HttpOnly session cookie;

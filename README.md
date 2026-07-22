@@ -1,24 +1,25 @@
-# NetMon — план платформы мониторинга
+# NetMon — платформа мониторинга
 
-Этот репозиторий содержит проектный план backend-платформы для мониторинга
-сетевого оборудования, компьютеров, серверов и ИБП. В качестве движка сбора и
-обработки метрик выбран Zabbix 7.0 LTS, а поверх него проектируется собственный
-API и веб-интерфейс.
+Этот репозиторий содержит backend-платформу для мониторинга сетевого
+оборудования, компьютеров, серверов и ИБП. В качестве движка сбора и обработки
+метрик выбран Zabbix 7.0 LTS, а поверх него — собственный API и веб-интерфейс.
 
-> Текущий статус: архитектурный пакет, bootstrap-инсталлятор базового контура
-> Zabbix и интерактивный frontend-прототип. Custom API ещё не реализован, поэтому
-> dashboard использует демонстрационные данные.
+> Текущий статус: Stage 1 foundation. Подняты PostgreSQL + Zabbix, custom API
+> (`/api/v1`) с auth/RBAC, audit, secrets и Zabbix gateway skeleton, а dashboard
+> подключается к API через nginx reverse proxy. Полный provisioning и React UI
+> ещё впереди.
 
 ## Что входит
 
 - [архитектура и границы системы](docs/ARCHITECTURE.md);
 - [подробный план backend и этапы разработки](docs/BACKEND_PLAN.md);
-- [контракт API](docs/API.md);
+- [контракт API](docs/API.md) и сгенерированный [OpenAPI](docs/openapi.json);
 - [спецификация dashboard и окна настроек](docs/UI_SPEC.md);
-- [`dashboard/`](dashboard/) — адаптивный прототип в фирменном стиле CoreSupport;
+- [`api/`](api/) — FastAPI Stage 1 (auth, inventory stubs, dashboard, gateway);
+- [`dashboard/`](dashboard/) — адаптивный UI в фирменном стиле CoreSupport;
 - [установка на чистый VPS](docs/DEPLOYMENT.md);
 - [эксплуатация, резервное копирование и обновление](docs/OPERATIONS.md);
-- `compose.yaml` для базового контура PostgreSQL + Zabbix;
+- `compose.yaml` для PostgreSQL + Zabbix + API + dashboard;
 - `install.sh` для установки Docker и запуска контура на Ubuntu 22.04/24.04.
 
 ## Быстрый запуск базового контура
@@ -29,41 +30,43 @@ API и веб-интерфейс.
 sudo /opt/netmon/install.sh
 ```
 
-По умолчанию Zabbix UI слушает только `127.0.0.1:8080`. Для безопасного доступа
-с локального компьютера создайте туннель:
+По умолчанию Zabbix UI, API и dashboard слушают только `127.0.0.1`. Для доступа
+с локального компьютера создайте туннели:
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 user@VPS_IP
+ssh -L 8080:127.0.0.1:8080 -L 8081:127.0.0.1:8081 -L 8000:127.0.0.1:8000 user@VPS_IP
 ```
 
-После этого откройте `http://127.0.0.1:8080`. Стандартная учётная запись первого
-входа Zabbix: `Admin` / `zabbix`; пароль необходимо сменить сразу после входа.
+- Zabbix UI: `http://127.0.0.1:8080` (`Admin` / `zabbix`, смените пароль);
+- Dashboard: `http://127.0.0.1:8081`;
+- API docs: `http://127.0.0.1:8000/api/v1/docs`.
 
-Прототип кастомного dashboard доступен через второй туннель:
+Учётная запись портала по умолчанию задаётся в `.env`
+(`BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`).
+
+Порт trapper `10051` по умолчанию тоже на loopback. Открывайте его только для
+сетей agent/proxy (firewall / `DOCKER-USER`).
+
+## Локальная разработка API
 
 ```bash
-ssh -L 8081:127.0.0.1:8081 user@VPS_IP
+cd api
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+export DATABASE_URL=sqlite+pysqlite:////tmp/netmon.db
+export JWT_SECRET=dev-jwt-secret-value-32-chars-min
+export SECRETS_MASTER_KEY=dev-master-key-32-bytes-long-key!
+python -m scripts.bootstrap
+uvicorn app.main:app --reload --port 8000
+pytest -q
 ```
-
-Откройте `http://127.0.0.1:8081`. В нём уже работают фильтрация площадок,
-подтверждение проблемы, поиск, окно настроек и мастер добавления устройства.
-
-Для тестового публичного bind (не рекомендуется без firewall и TLS):
-
-```bash
-sudo ZABBIX_WEB_BIND=0.0.0.0 /opt/netmon/install.sh
-```
-
-Полная процедура, требования и сценарий однокомандной установки приведены в
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Основное архитектурное решение
 
 Zabbix остаётся единственным владельцем конфигурации мониторинга, метрик,
 триггеров и событий. Кастомный backend не пишет напрямую в таблицы Zabbix, а
-работает через JSON-RPC API. Собственная PostgreSQL-схема хранит только
+работает через JSON-RPC API. Собственная PostgreSQL-схема (`netmon`) хранит
 пользователей портала, профили подключения, аудит и состояние фоновых операций.
-Такой подход позволяет обновлять Zabbix без привязки к его внутренней схеме БД.
 
 ## Официальные материалы
 

@@ -10,6 +10,15 @@ CLAUDE.md
 *.log
 *.dump
 backups/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+api/.venv/
+*.egg-info/
+.coverage
+htmlcov/
 
 # Editors
 .idea/

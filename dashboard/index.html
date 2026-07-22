@@ -6,9 +6,6 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>CoreSupport Monitor — инфраструктура</title>
   <meta name="description" content="Панель мониторинга инфраструктуры CoreSupport">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -53,21 +50,21 @@
         <p class="nav-caption">Мониторинг</p>
         <a class="active" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
         <a href="#devices"><svg><use href="#i-server"/></svg><span>Устройства</span><b id="navDeviceCount">128</b></a>
-        <a href="#problems"><svg><use href="#i-alert"/></svg><span>Проблемы</span><i>7</i></a>
+        <a href="#problems"><svg><use href="#i-alert"/></svg><span>Проблемы</span><i id="navProblemCount">7</i></a>
         <a href="#sites"><svg><use href="#i-map"/></svg><span>Площадки</span></a>
         <p class="nav-caption second">Управление</p>
         <button type="button" id="openSettings"><svg><use href="#i-sliders"/></svg><span>Настройки</span></button>
       </nav>
 
-      <div class="system-card">
+      <div class="system-card" id="systemStatus">
         <div class="system-icon"><svg><use href="#i-activity"/></svg></div>
-        <div><strong>Система работает</strong><span>Zabbix · 20 сек назад</span></div>
-        <span class="live-dot" aria-label="Онлайн"></span>
+        <div><strong id="systemStatusTitle">Проверка связи</strong><span id="systemStatusMeta">API · ожидание</span></div>
+        <span class="live-dot" id="systemLiveDot" aria-label="Статус"></span>
       </div>
       <div class="sidebar-user">
-        <span class="avatar">НА</span>
-        <div><strong>Николай</strong><span>Администратор</span></div>
-        <button class="icon-button" aria-label="Меню профиля"><svg><use href="#i-chevron"/></svg></button>
+        <span class="avatar" id="userAvatar">—</span>
+        <div><strong id="userName">Гость</strong><span id="userRole">нет сессии</span></div>
+        <button class="icon-button" id="reconnectApi" aria-label="Подключить API" title="Подключить API"><svg><use href="#i-refresh"/></svg></button>
       </div>
     </aside>
 
@@ -82,7 +79,7 @@
           <kbd>⌘ K</kbd>
         </label>
         <div class="top-actions">
-          <span class="sync-state"><span></span>Данные актуальны</span>
+          <span class="sync-state" id="syncState"><span></span>Ожидание API</span>
           <button class="icon-button has-badge" aria-label="Уведомления"><svg><use href="#i-bell"/></svg><i>3</i></button>
           <button class="button primary" id="addDeviceTop"><svg><use href="#i-plus"/></svg>Добавить устройство</button>
         </div>
@@ -93,7 +90,7 @@
           <div>
             <p class="eyebrow">Инфраструктура · 24/7</p>
             <h1>Доброе утро, Николай</h1>
-            <p>Вся инфраструктура под контролем. Требуют внимания 7 событий.</p>
+            <p id="overviewSubtitle">Вся инфраструктура под контролем. Требуют внимания 7 событий.</p>
           </div>
           <div class="heading-actions">
             <label class="compact-select"><span>Площадка</span><select id="siteFilter"><option value="all">Все площадки</option><option value="office">Главный офис</option><option value="dc">ЦОД Маяковский</option><option value="warehouse">Склад Восточный</option></select></label>
@@ -106,21 +103,21 @@
             <div class="metric-icon"><svg><use href="#i-server"/></svg></div>
             <div class="metric-label">Всего устройств</div>
             <div class="metric-value" id="deviceCount">128</div>
-            <div class="metric-note positive"><svg><use href="#i-check"/></svg>121 доступно</div>
+            <div class="metric-note positive" id="deviceCountNote"><svg><use href="#i-check"/></svg>121 доступно</div>
             <span class="metric-spark"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
           </article>
           <article class="metric-card green">
             <div class="metric-icon"><svg><use href="#i-activity"/></svg></div>
             <div class="metric-label">Доступность</div>
-            <div class="metric-value">99,94<span>%</span></div>
-            <div class="metric-note positive">+0,12% за месяц</div>
-            <div class="metric-progress"><span style="width:99.94%"></span></div>
+            <div class="metric-value" id="availabilityValue">99,94<span>%</span></div>
+            <div class="metric-note positive" id="availabilityNote">+0,12% за месяц</div>
+            <div class="metric-progress"><span id="availabilityBar" style="width:99.94%"></span></div>
           </article>
           <article class="metric-card terra">
             <div class="metric-icon"><svg><use href="#i-alert"/></svg></div>
             <div class="metric-label">Активные проблемы</div>
-            <div class="metric-value">7</div>
-            <div class="metric-note warning">2 требуют реакции</div>
+            <div class="metric-value" id="problemCount">7</div>
+            <div class="metric-note warning" id="problemCountNote">2 требуют реакции</div>
             <div class="severity-dots"><i class="high"></i><i class="high"></i><i></i><i></i><i></i><i></i><i></i></div>
           </article>
           <article class="metric-card blue">
@@ -175,10 +172,10 @@
           <div class="table-scroll">
             <table class="problems-table">
               <thead><tr><th>Важность</th><th>Проблема</th><th>Устройство</th><th>Площадка</th><th>Длительность</th><th><span class="sr-only">Действия</span></th></tr></thead>
-              <tbody>
-                <tr data-site="dc"><td><span class="severity disaster">Критическая</span></td><td><strong>RAID-массив в деградированном состоянии</strong><small>Свободен только один резервный диск</small></td><td><span class="device-cell"><i class="device-icon server"><svg><use href="#i-server"/></svg></i><span>srv-db-01<small>10.20.1.12</small></span></span></td><td>ЦОД Маяковский</td><td>18 мин</td><td><button class="row-action acknowledge">Принять</button></td></tr>
-                <tr data-site="office"><td><span class="severity high">Высокая</span></td><td><strong>Высокая загрузка канала WAN</strong><small>Использование выше 92% в течение 15 минут</small></td><td><span class="device-cell"><i class="device-icon router"><svg><use href="#i-router"/></svg></i><span>rt-office-01<small>10.10.0.1</small></span></span></td><td>Главный офис</td><td>26 мин</td><td><button class="row-action acknowledge">Принять</button></td></tr>
-                <tr data-site="warehouse"><td><span class="severity average">Средняя</span></td><td><strong>Низкий заряд батареи ИБП</strong><small>Оставшееся время работы: 14 минут</small></td><td><span class="device-cell"><i class="device-icon ups"><svg><use href="#i-ups"/></svg></i><span>ups-stock-02<small>10.30.2.16</small></span></span></td><td>Склад Восточный</td><td>1 ч 12 мин</td><td><button class="row-action acknowledge">Принять</button></td></tr>
+              <tbody id="problemsBody">
+                <tr data-site="dc"><td><span class="severity disaster">Критическая</span></td><td><strong>RAID-массив в деградированном состоянии</strong><small>Свободен только один резервный диск</small></td><td><span class="device-cell"><i class="device-icon server"><svg><use href="#i-server"/></svg></i><span>srv-db-01<small>10.20.1.12</small></span></span></td><td>ЦОД Маяковский</td><td>18 мин</td><td><button class="row-action acknowledge" data-event-id="demo-1">Принять</button></td></tr>
+                <tr data-site="office"><td><span class="severity high">Высокая</span></td><td><strong>Высокая загрузка канала WAN</strong><small>Использование выше 92% в течение 15 минут</small></td><td><span class="device-cell"><i class="device-icon router"><svg><use href="#i-router"/></svg></i><span>rt-office-01<small>10.10.0.1</small></span></span></td><td>Главный офис</td><td>26 мин</td><td><button class="row-action acknowledge" data-event-id="demo-2">Принять</button></td></tr>
+                <tr data-site="warehouse"><td><span class="severity average">Средняя</span></td><td><strong>Низкий заряд батареи ИБП</strong><small>Оставшееся время работы: 14 минут</small></td><td><span class="device-cell"><i class="device-icon ups"><svg><use href="#i-ups"/></svg></i><span>ups-stock-02<small>10.30.2.16</small></span></span></td><td>Склад Восточный</td><td>1 ч 12 мин</td><td><button class="row-action acknowledge" data-event-id="demo-3">Принять</button></td></tr>
               </tbody>
             </table>
           </div>
@@ -186,7 +183,7 @@
 
         <section id="sites" class="section-block">
           <div class="section-head"><div><p class="panel-kicker">География</p><h2>Площадки</h2></div><button class="button secondary" id="addSite"><svg><use href="#i-plus"/></svg>Добавить площадку</button></div>
-          <div class="site-grid">
+          <div class="site-grid" id="siteGrid">
             <article class="site-card" data-site-card="office"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health ok">В норме</span></div><h3>Главный офис</h3><p>Пенза · proxy-office</p><div class="site-stats"><span><b>68</b> устройств</span><span><b>1</b> проблема</span></div><div class="site-bar"><span style="width:98%"></span></div></article>
             <article class="site-card" data-site-card="dc"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health attention">Требует внимания</span></div><h3>ЦОД Маяковский</h3><p>Москва · proxy-dc-msk</p><div class="site-stats"><span><b>42</b> устройства</span><span><b>4</b> проблемы</span></div><div class="site-bar attention"><span style="width:91%"></span></div></article>
             <article class="site-card" data-site-card="warehouse"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health ok">В норме</span></div><h3>Склад Восточный</h3><p>Пенза · proxy-stock</p><div class="site-stats"><span><b>18</b> устройств</span><span><b>2</b> проблемы</span></div><div class="site-bar"><span style="width:96%"></span></div></article>
@@ -203,7 +200,7 @@
           </div>
         </section>
 
-        <footer class="app-footer"><span>CoreSupport Monitor · интерфейсный прототип</span><span>Данные демонстрационные · API ещё не подключён</span></footer>
+        <footer class="app-footer"><span>CoreSupport Monitor</span><span id="footerStatus">Подключение к /api/v1…</span></footer>
       </div>
     </main>
   </div>
