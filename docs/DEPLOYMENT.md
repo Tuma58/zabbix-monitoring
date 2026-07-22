@@ -35,22 +35,30 @@ PostgreSQL, Zabbix server, Zabbix web, custom API (`/api/v1`) и dashboard.
 работает на тех же портах: сервисы слушают `0.0.0.0`. CORS и SAN сертификата
 включают этот адрес автоматически.
 
-### Проброс портов на роутере (NAT / FiOS)
+### Проброс портов на роутере (NAT)
 
-Если VPS/сервер за NAT, на роутере нужны forward на внутренний IP хоста:
+Для доступа **из интернета** достаточно пробросить только HTTPS-порты:
 
-| Внешний порт | Куда | Назначение |
-|---|---|---|
-| 7080 | host:7080 | Zabbix HTTP |
-| 7081 | host:7081 | Dashboard HTTP |
-| 7000 | host:7000 | API HTTP |
-| 7443 | host:7443 | Zabbix HTTPS |
-| 7444 | host:7444 | Dashboard HTTPS |
-| 7445 | host:7445 | API HTTPS |
-| 10051 | host:10051 | Zabbix trapper (только нужные сети) |
+| Внешний → host | Назначение |
+|---|---|
+| 7443 → 7443 | Zabbix UI (HTTPS) |
+| 7444 → 7444 | Dashboard (HTTPS, `/api/` → API) |
+| 7445 → 7445 | API docs/health (HTTPS) |
+| 10051 → 10051 | Zabbix trapper (только сети agent/proxy) |
 
-Без проброса `7081` dashboard «за NATом» не откроется. Без `7443–7445`
-не откроется HTTPS. Проверка на самом хосте:
+HTTP-порты `7080`, `7081`, `7000` **наружу не пробрасывайте** — так безопаснее.
+Локально/VPN по `100.10.10.66` HTTP по-прежнему доступен:
+
+- `http://100.10.10.66:7080`, `:7081`, `:7000`
+- `https://100.10.10.66:7443`, `:7444`, `:7445`
+
+URL снаружи (публичный IP, принять самоподписанный сертификат):
+
+- Zabbix: `https://PUBLIC_IP:7443`
+- Dashboard: `https://PUBLIC_IP:7444`
+- API docs: `https://PUBLIC_IP:7445/api/v1/docs`
+
+Проверка на самом хосте:
 
 ```bash
 sudo /opt/netmon/scripts/diagnose-netmon.sh
