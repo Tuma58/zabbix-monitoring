@@ -305,6 +305,56 @@ dialog::backdrop { background: rgba(35,42,45,.37); backdrop-filter: blur(8px); a
 .protocol-card { min-height: 126px; position: relative; display: flex; flex-direction: column; align-items: flex-start; padding: 14px; border: 1px solid var(--border); border-radius: 13px; background: rgba(255,255,255,.6); transition: .2s; }.protocol-card > i { width: 31px; height: 31px; display: grid; place-items: center; margin-bottom: 10px; color: var(--indigo); border-radius: 9px; background: rgba(61,90,128,.08); }.protocol-card svg { width: 16px; }.protocol-card b { font-size: 10px; }.protocol-card small { color: var(--ink-soft); font-size: 7px; }.protocol-card em { position: absolute; right: 8px; top: 8px; padding: 3px 5px; color: var(--green-dark); border-radius: 5px; background: rgba(122,158,126,.12); font-size: 6px; font-style: normal; font-weight: 800; text-transform: uppercase; }
 .protocols input:checked + .protocol-card { border-color: var(--indigo-2); background: rgba(91,123,154,.08); box-shadow: 0 0 0 2px rgba(91,123,154,.1); }.protocols input:focus-visible + .protocol-card { outline: 3px solid rgba(91,123,154,.3); }
 .connection-fields { margin-top: 4px; }.add-profile { margin-top: 10px; }.add-profile svg { width: 13px; }
+
+.guide-subtype-field { margin-bottom: 14px; }
+.connection-guide-panel { margin: 0 0 18px; }
+.guide-frame {
+  border: 1px solid rgba(91,123,154,.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(242,238,232,.45));
+  overflow: hidden;
+  max-height: min(340px, 42vh);
+  overflow-y: auto;
+}
+.guide-frame-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(250,248,245,.96);
+  backdrop-filter: blur(6px);
+}
+.guide-frame-head h4 { margin: 6px 0 4px; font-size: 11px; letter-spacing: -.01em; }
+.guide-template { margin: 0; color: var(--ink-soft); font-size: 7px; }
+.guide-template em { color: var(--indigo); font-style: normal; font-weight: 700; }
+.guide-badge {
+  display: inline-block;
+  padding: 3px 7px;
+  color: var(--indigo);
+  border-radius: 6px;
+  background: rgba(91,123,154,.1);
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.guide-frame-body { padding: 12px 16px 16px; color: var(--ink-soft); font-size: 8px; line-height: 1.55; }
+.guide-frame-body p { margin: 0 0 10px; }
+.guide-frame-body code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(45,52,54,.06);
+  font-size: 7px;
+  word-break: break-all;
+}
+.guide-steps { margin: 0 0 12px; padding-left: 18px; }
+.guide-steps li { margin-bottom: 8px; }
+.guide-steps li:last-child { margin-bottom: 0; }
+.guide-links { margin: 0; padding-left: 16px; list-style: disc; }
+.guide-links a { color: var(--indigo); font-weight: 700; text-decoration: none; }
+.guide-links a:hover { text-decoration: underline; }
+
 .probe-card { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.65); }
 .probe-animation { width: 52px; height: 52px; position: relative; display: grid; place-items: center; }.probe-animation span { position: absolute; inset: 4px; border: 1px solid rgba(61,90,128,.18); border-radius: 50%; opacity: 0; }.probe-animation.running span { animation: probe 1.8s ease-out infinite; }.probe-animation.running span:nth-child(2){animation-delay:.5s}.probe-animation.running span:nth-child(3){animation-delay:1s}.probe-animation i { width: 35px; height: 35px; display: grid; place-items: center; z-index: 2; color: var(--indigo); border-radius: 11px; background: rgba(61,90,128,.1); }.probe-animation svg { width: 17px; }
 .probe-title strong, .probe-title span { display: block; }.probe-title strong { font-size: 10px; }.probe-title span { color: var(--ink-soft); font-size: 8px; }
@@ -367,6 +417,7 @@ dialog::backdrop { background: rgba(35,42,45,.37); backdrop-filter: blur(8px); a
   .modal { width: 100vw; max-height: 100vh; border-radius: 0; }.modal-shell { min-height: 100vh; border-radius: 0; }.modal-head { padding: 15px; }
   .wizard-content { min-height: 0; height: calc(100vh - 224px); padding: 20px 15px; }.wizard-footer { min-height: 70px; padding: 12px 15px; }
   .form-grid.two, .protocols, .settings-grid { grid-template-columns: 1fr; }.protocols { gap: 8px; }.protocol-card { min-height: 82px; padding-left: 58px; justify-content: center; }.protocol-card > i { position: absolute; left: 13px; top: 22px; }.protocol-card em { top: 29px; }
+  .guide-frame { max-height: min(280px, 35vh); }
   .probe-card { grid-template-columns: auto 1fr; }.probe-card .button { grid-column: 1 / -1; }
   .preview-device { grid-template-columns: auto 1fr; }.preview-status { grid-column: 1 / -1; }
   .preview-list > div { grid-template-columns: 1fr; gap: 2px; }

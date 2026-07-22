@@ -396,6 +396,48 @@
     });
   }
 
+  function subtypeLabels(deviceType) {
+    const map = {
+      server: 'Операционная система сервера',
+      computer: 'Операционная система рабочей станции',
+      router: 'Производитель сетевого оборудования',
+      ups: 'Модель / производитель ИБП',
+    };
+    return map[deviceType] || 'Уточните тип / производителя';
+  }
+
+  function updateConnectionGuide() {
+    const guides = window.NetmonConnectionGuides;
+    if (!guides) return;
+    const deviceType = $('#deviceType')?.value || '';
+    const protocol = $('input[name="protocol"]:checked')?.value || 'SNMPv3';
+    const subtypeSelect = $('#guideSubtype');
+    const subtypeField = $('#guideSubtypeField');
+    const subtypeLabel = $('#guideSubtypeLabel');
+
+    if (subtypeLabel) subtypeLabel.textContent = subtypeLabels(deviceType);
+
+    let subtype = subtypeSelect?.value || '';
+    if (deviceType && guides.SUBTYPES[deviceType]?.length) {
+      if (!subtype || !guides.SUBTYPES[deviceType].some((item) => item.value === subtype)) {
+        subtype = guides.SUBTYPES[deviceType][0].value;
+      }
+      guides.populateSubtypeSelect(subtypeSelect, deviceType, subtype);
+    } else if (subtypeField) {
+      subtypeField.setAttribute('hidden', '');
+    }
+
+    guides.renderGuide($('#connectionGuideContent'), deviceType, subtype, protocol);
+  }
+
+  function applySuggestedProtocol(deviceType) {
+    const guides = window.NetmonConnectionGuides;
+    if (!guides || !deviceType) return;
+    const protocol = guides.suggestedProtocol(deviceType);
+    const input = $(`input[name="protocol"][value="${protocol}"]`);
+    if (input) input.checked = true;
+  }
+
   function resetWizard() {
     form.reset();
     currentStep = 1;
@@ -412,6 +454,8 @@
       $('em', item).textContent = '—';
     });
     $$('.field input, .field select', form).forEach((field) => field.classList.remove('invalid'));
+    applySuggestedProtocol($('#deviceType')?.value || '');
+    updateConnectionGuide();
     renderStep();
   }
 
@@ -427,6 +471,7 @@
     backButton.hidden = currentStep === 1;
     nextButton.innerHTML = currentStep === 4 ? `${icon('i-plus')}Добавить в мониторинг` : `Продолжить${icon('i-chevron')}`;
     nextButton.disabled = currentStep === 3 && !probeComplete;
+    if (currentStep === 2) updateConnectionGuide();
   }
 
   function validateStepOne() {
@@ -456,6 +501,9 @@
   function fillPreview() {
     const protocol = $('input[name="protocol"]:checked').value;
     const deviceType = $('#deviceType').value || 'server';
+    const guides = window.NetmonConnectionGuides;
+    const subtype = $('#guideSubtype')?.value || '';
+    const guide = guides?.getGuide(deviceType, subtype, protocol);
     $('#previewName').textContent = $('#deviceName').value || 'Новое устройство';
     $('#previewAddress').textContent = $('#deviceAddress').value || '—';
     $('#previewSite').textContent = $('#deviceSite').value === '__new__'
@@ -466,18 +514,18 @@
     const modelNode = $('#previewModel');
     const templateNode = $('#previewTemplate');
     const metricsNode = $('#previewMetrics');
+    if (guide) {
+      if (modelNode) modelNode.textContent = guide.title.replace(/ — .+$/, '');
+      if (templateNode) templateNode.textContent = guide.template;
+    }
     if (protocol === 'Zabbix agent2') {
-      if (modelNode) modelNode.textContent = deviceType === 'server' ? 'Windows / Linux agent' : 'Zabbix agent2';
-      if (templateNode) templateNode.textContent = deviceType === 'server' ? 'Windows by Zabbix agent' : 'Linux by Zabbix agent';
       if (metricsNode) metricsNode.textContent = 'CPU, RAM, диски, сеть, службы, процессы';
     } else if (protocol === 'ICMP') {
       if (modelNode) modelNode.textContent = 'ICMP host';
       if (templateNode) templateNode.textContent = 'ICMP Ping';
       if (metricsNode) metricsNode.textContent = 'Доступность и время отклика';
-    } else {
-      if (modelNode) modelNode.textContent = 'SNMP device';
-      if (templateNode) templateNode.textContent = 'Generic SNMP';
-      if (metricsNode) metricsNode.textContent = 'Доступность, интерфейсы, системные метрики';
+    } else if (metricsNode) {
+      if (metricsNode) metricsNode.textContent = 'Доступность, интерфейсы, температура, питание (UPS)';
     }
   }
 
@@ -489,6 +537,10 @@
     }
     if (currentStep < 4) {
       currentStep += 1;
+      if (currentStep === 2) {
+        applySuggestedProtocol($('#deviceType')?.value || '');
+        updateConnectionGuide();
+      }
       if (currentStep === 4) fillPreview();
       renderStep();
       return;
@@ -652,6 +704,12 @@
     openDialog(settings);
   });
   $('#runProbe').addEventListener('click', () => { runProbe(); });
+  $$('input[name="protocol"]').forEach((input) => input.addEventListener('change', updateConnectionGuide));
+  $('#deviceType')?.addEventListener('change', () => {
+    applySuggestedProtocol($('#deviceType').value || '');
+    updateConnectionGuide();
+  });
+  $('#guideSubtype')?.addEventListener('change', updateConnectionGuide);
   nextButton.addEventListener('click', advance);
   backButton.addEventListener('click', () => { if (currentStep > 1) { currentStep -= 1; renderStep(); } });
 

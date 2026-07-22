@@ -222,12 +222,27 @@
             </section>
 
             <section class="wizard-page" data-step="2">
-              <div class="step-heading"><span class="step-icon"><svg><use href="#i-sliders"/></svg></span><div><h3>Как подключаться?</h3><p>Выберите способ. Для сетевого оборудования и ИБП обычно подходит SNMPv3.</p></div></div>
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-sliders"/></svg></span><div><h3>Как подключаться?</h3><p>Выберите протокол и следуйте инструкции для вашего типа устройства.</p></div></div>
               <fieldset class="protocols"><legend class="sr-only">Протокол подключения</legend>
                 <label><input type="radio" name="protocol" value="SNMPv3" checked><span class="protocol-card"><i><svg><use href="#i-router"/></svg></i><b>SNMPv3</b><small>Рекомендуется для сети и ИБП</small><em>Безопасно</em></span></label>
                 <label><input type="radio" name="protocol" value="Zabbix agent2"><span class="protocol-card"><i><svg><use href="#i-monitor"/></svg></i><b>Zabbix agent2</b><small>Linux и Windows</small></span></label>
                 <label><input type="radio" name="protocol" value="ICMP"><span class="protocol-card"><i><svg><use href="#i-activity"/></svg></i><b>Только ICMP</b><small>Базовая доступность</small></span></label>
               </fieldset>
+              <label class="field guide-subtype-field" id="guideSubtypeField" hidden>
+                <span id="guideSubtypeLabel">Уточните тип / производителя</span>
+                <select id="guideSubtype" aria-describedby="guideSubtypeHint"></select>
+                <small id="guideSubtypeHint">Инструкция ниже обновится после выбора</small>
+              </label>
+              <div class="connection-guide-panel" id="connectionGuidePanel" aria-live="polite">
+                <div class="guide-frame" id="connectionGuideContent">
+                  <header class="guide-frame-head">
+                    <span class="guide-badge">—</span>
+                    <h4>Инструкция по подключению</h4>
+                    <p class="guide-template">Выберите тип устройства на шаге 1</p>
+                  </header>
+                  <div class="guide-frame-body"><p>После выбора типа и протокола здесь появится пошаговая инструкция со ссылками на агенты и документацию.</p></div>
+                </div>
+              </div>
               <div class="form-grid two connection-fields">
                 <label class="field"><span>Профиль подключения</span><select id="credentialProfile"><option>SNMP Core · authPriv</option><option>SNMP UPS · authPriv</option><option>Agent PSK · office</option></select><small>Секреты хранятся зашифрованно</small></label>
                 <label class="field"><span>Zabbix proxy</span><select id="proxy"><option value="">По умолчанию (сервер)</option></select><small>Оставьте пустым для прямого подключения к Zabbix server</small></label>
@@ -291,6 +306,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"><span><svg><use href="#i-check"/></svg></span><p></p></div>
 
+  <script src="connection-guides.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
