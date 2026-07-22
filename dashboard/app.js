@@ -107,10 +107,10 @@
       apiOnline = true;
     } catch {
       apiOnline = false;
-      setFooter('API недоступен · показаны локальные данные');
+      setFooter('API недоступен');
       setSyncState('API недоступен', false);
       $('#systemStatusTitle').textContent = 'API недоступен';
-      $('#systemStatusMeta').textContent = 'работаем в офлайн-режиме';
+      $('#systemStatusMeta').textContent = 'проверьте подключение';
       return false;
     }
 
@@ -144,6 +144,9 @@
     $('#userName').textContent = name;
     $('#userRole').textContent = (me.roles || []).join(', ') || 'viewer';
     $('#userAvatar').textContent = name.slice(0, 2).toUpperCase();
+    const greeting = `Здравствуйте, ${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+    const greetingNode = $('#overviewGreeting');
+    if (greetingNode) greetingNode.textContent = greeting;
   }
 
   function severityClass(severity) {
@@ -189,6 +192,10 @@
   function renderProblems(problems) {
     const bodyNode = $('#problemsBody');
     if (!bodyNode) return;
+    if (!problems.length) {
+      bodyNode.innerHTML = '<tr class="empty-row"><td colspan="6">Активных проблем нет</td></tr>';
+      return;
+    }
     bodyNode.innerHTML = problems.map((problem) => `
       <tr data-site="${escapeHtml(problem.site)}">
         <td><span class="severity ${severityClass(problem.severity)}">${severityLabel(problem.severity)}</span></td>
@@ -214,6 +221,13 @@
       heading.innerHTML = '<span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Последние данные</span>';
       list.appendChild(heading);
     }
+    if (!devices.length) {
+      const empty = document.createElement('article');
+      empty.className = 'empty-state';
+      empty.innerHTML = '<span>Устройств пока нет. Нажмите «Добавить устройство».</span>';
+      list.appendChild(empty);
+      return;
+    }
     devices.forEach((device) => {
       const article = document.createElement('article');
       const siteName = sitesById[device.site_id] || '—';
@@ -225,6 +239,12 @@
   function renderSites(sites, devices) {
     const grid = $('#siteGrid');
     if (!grid) return;
+    if (!sites.length) {
+      grid.innerHTML = '<article class="site-card empty-state"><p>Площадок пока нет. Создайте первую при добавлении устройства.</p></article>';
+      const filter = $('#siteFilter');
+      if (filter) filter.innerHTML = '<option value="all">Все площадки</option>';
+      return;
+    }
     const counts = devices.reduce((acc, device) => {
       acc[device.site_id] = (acc[device.site_id] || 0) + 1;
       return acc;
@@ -262,7 +282,30 @@
     $('#problemCountNote').textContent = problemTotal ? `${problemTotal} активных событий` : 'Активных проблем нет';
     $('#overviewSubtitle').textContent = problemTotal
       ? `Инфраструктура под контролем. Требуют внимания ${problemTotal} событий.`
-      : 'Инфраструктура под контролем. Активных проблем нет.';
+      : total
+        ? 'Инфраструктура под контролем. Активных проблем нет.'
+        : 'Добавьте первое устройство через мастер «Добавить устройство».';
+
+    const chartAvailability = $('#chartAvailability');
+    if (chartAvailability) chartAvailability.textContent = total ? `${pctText}%` : '—';
+    const chartNote = $('#chartAvailabilityNote');
+    if (chartNote) {
+      chartNote.textContent = total ? `${available} из ${total} доступны` : 'Нет данных за период';
+    }
+    const donutTotal = $('#donutDeviceTotal');
+    if (donutTotal) donutTotal.textContent = String(total);
+    const statusAvailable = $('#statusAvailable');
+    const statusDegraded = $('#statusDegraded');
+    const statusFailed = $('#statusFailed');
+    if (statusAvailable) statusAvailable.textContent = String(available);
+    if (statusDegraded) statusDegraded.textContent = String(summary.availability?.unavailable || 0);
+    if (statusFailed) statusFailed.textContent = '0';
+    const typeBreakdown = $('#typeBreakdown');
+    if (typeBreakdown) {
+      typeBreakdown.innerHTML = total
+        ? `<span><svg><use href="#i-server"/></svg>Устройств <b>${total}</b></span>`
+        : '<span>Добавьте устройства через мастер</span>';
+    }
 
     const zabbix = summary.zabbix || {};
     const zabbixLabel = zabbix.status === 'ok'
@@ -274,6 +317,39 @@
     $('#systemStatusMeta').textContent = `${zabbixLabel} · источник ${summary.source}`;
     setSyncState(summary.stale ? 'Устаревшие данные' : 'Данные актуальны', !summary.stale);
     setFooter(`API /v1 · источник ${summary.source} · ${zabbixLabel}`);
+
+    const settingsZabbixMeta = $('#settingsZabbixMeta');
+    const settingsZabbixStatus = $('#settingsZabbixStatus');
+    if (settingsZabbixMeta) {
+      settingsZabbixMeta.textContent = zabbix.status === 'ok'
+        ? `API доступен · ${zabbix.version || 'Zabbix'}`
+        : zabbix.status === 'disabled' ? 'Интеграция выключена' : 'Zabbix недоступен';
+    }
+    if (settingsZabbixStatus) {
+      settingsZabbixStatus.textContent = zabbix.status === 'ok' ? 'Подключено' : '—';
+      settingsZabbixStatus.classList.toggle('setting-ok', zabbix.status === 'ok');
+    }
+    const settingsSitesMeta = $('#settingsSitesMeta');
+    const settingsSitesCount = $('#settingsSitesCount');
+    if (settingsSitesMeta) settingsSitesMeta.textContent = `${summary.sites_total || 0} площадок`;
+    if (settingsSitesCount) settingsSitesCount.textContent = String(summary.sites_total || 0);
+    const settingsSystemMeta = $('#settingsSystemMeta');
+    const settingsSystemStatus = $('#settingsSystemStatus');
+    if (settingsSystemMeta) settingsSystemMeta.textContent = summary.stale ? 'Данные устарели' : 'API и portal DB';
+    if (settingsSystemStatus) {
+      settingsSystemStatus.textContent = summary.stale ? 'Внимание' : 'В норме';
+      settingsSystemStatus.classList.toggle('setting-ok', !summary.stale);
+    }
+  }
+
+  function populateWizardSites(sites) {
+    const select = $('#deviceSite');
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">Выберите или создайте площадку</option>'
+      + sites.map((site) => `<option value="${escapeHtml(site.name)}" data-site-id="${escapeHtml(site.id)}">${escapeHtml(site.name)}</option>`).join('')
+      + '<option value="__new__">+ Создать новую площадку…</option>';
+    if (current) select.value = current;
   }
 
   async function refreshDashboard() {
@@ -293,6 +369,7 @@
     renderProblems(problems);
     renderDevices(devices, sitesById);
     renderSites(sites, devices);
+    populateWizardSites(sites);
     if (health.status !== 'ok') {
       setSyncState('Зависимости деградированы', false);
     }
@@ -302,14 +379,7 @@
     $$('.acknowledge').forEach((button) => {
       button.onclick = async () => {
         const eventId = button.dataset.eventId;
-        if (!eventId || button.disabled) return;
-        if (!accessToken || eventId.startsWith('demo-')) {
-          button.textContent = 'Принято';
-          button.classList.add('done');
-          button.disabled = true;
-          showToast('Проблема принята локально');
-          return;
-        }
+        if (!eventId || button.disabled || !accessToken) return;
         try {
           await api(`/problems/${encodeURIComponent(eventId)}/ack`, {
             method: 'POST',
@@ -384,11 +454,31 @@
   }
 
   function fillPreview() {
+    const protocol = $('input[name="protocol"]:checked').value;
+    const deviceType = $('#deviceType').value || 'server';
     $('#previewName').textContent = $('#deviceName').value || 'Новое устройство';
     $('#previewAddress').textContent = $('#deviceAddress').value || '—';
-    $('#previewSite').textContent = $('#deviceSite').value || '—';
-    $('#previewProtocol').textContent = $('input[name="protocol"]:checked').value;
-    $('#previewProxy').textContent = $('#proxy').value;
+    $('#previewSite').textContent = $('#deviceSite').value === '__new__'
+      ? ($('#deviceSite').selectedOptions[0]?.textContent || 'Новая площадка')
+      : ($('#deviceSite').value || '—');
+    $('#previewProtocol').textContent = protocol;
+    $('#previewProxy').textContent = $('#proxy').value || 'Сервер по умолчанию';
+    const modelNode = $('#previewModel');
+    const templateNode = $('#previewTemplate');
+    const metricsNode = $('#previewMetrics');
+    if (protocol === 'Zabbix agent2') {
+      if (modelNode) modelNode.textContent = deviceType === 'server' ? 'Windows / Linux agent' : 'Zabbix agent2';
+      if (templateNode) templateNode.textContent = deviceType === 'server' ? 'Windows by Zabbix agent' : 'Linux by Zabbix agent';
+      if (metricsNode) metricsNode.textContent = 'CPU, RAM, диски, сеть, службы, процессы';
+    } else if (protocol === 'ICMP') {
+      if (modelNode) modelNode.textContent = 'ICMP host';
+      if (templateNode) templateNode.textContent = 'ICMP Ping';
+      if (metricsNode) metricsNode.textContent = 'Доступность и время отклика';
+    } else {
+      if (modelNode) modelNode.textContent = 'SNMP device';
+      if (templateNode) templateNode.textContent = 'Generic SNMP';
+      if (metricsNode) metricsNode.textContent = 'Доступность, интерфейсы, системные метрики';
+    }
   }
 
   function advance() {
@@ -475,97 +565,59 @@
         showToast('Проверка через API завершена');
         return;
       } catch (error) {
-        showToast(error.message || 'Probe через API не удался, локальная симуляция');
+        showToast(error.message || 'Проверка не удалась');
       }
+    } else {
+      showToast('API недоступен — проверка невозможна');
     }
 
-    const labels = [
-      ['Ответ получен за 4 мс', '4 мс'],
-      [`${$('input[name="protocol"]:checked').value} доступен`, 'Доступен'],
-      ['Профиль принят устройством', 'Успешно'],
-      ['APC Smart-UPS SRT 3000', 'Определено'],
-    ];
-    let index = 0;
-    const processNext = () => {
-      if (runId !== probeRunId) return;
-      if (index > 0) {
-        const previous = checks[index - 1];
-        previous.className = 'success';
-        $('i', previous).innerHTML = icon('i-check');
-        $('small', previous).textContent = labels[index - 1][0];
-        $('em', previous).textContent = labels[index - 1][1];
-      }
-      if (index === checks.length) {
-        probeComplete = true;
-        nextButton.disabled = false;
-        $('#runProbe').disabled = false;
-        $('#runProbe').innerHTML = `${icon('i-refresh')}Проверить ещё раз`;
-        $('#probeTitle').textContent = 'Подключение работает';
-        $('#probeSubtitle').textContent = 'Устройство определено, настройки мониторинга подобраны';
-        $('.probe-animation').classList.remove('running');
-        showToast('Проверка успешно завершена');
-        return;
-      }
-      const current = checks[index];
-      current.className = 'checking';
-      $('i', current).innerHTML = icon('i-refresh');
-      $('small', current).textContent = 'Проверяем…';
-      index += 1;
-      setTimeout(processNext, 620);
-    };
-    processNext();
+    probeComplete = false;
+    nextButton.disabled = true;
+    $('#runProbe').disabled = false;
+    $('#runProbe').innerHTML = `${icon('i-refresh')}Проверить подключение`;
+    $('#probeTitle').textContent = 'Проверка не выполнена';
+    $('#probeSubtitle').textContent = 'Подключитесь к API и повторите';
+    $('.probe-animation').classList.remove('running');
   }
 
   async function addDevice() {
     const name = $('#deviceName').value;
     const address = $('#deviceAddress').value;
-    const site = $('#deviceSite').value;
-    const typeValue = $('#deviceType').value || 'router';
+    let site = $('#deviceSite').value;
+    const typeValue = $('#deviceType').value || 'server';
 
-    if (accessToken && apiOnline) {
-      try {
-        let siteId = sitesCache.find((item) => item.name === site)?.id || sitesCache[0]?.id;
-        if (!siteId) {
-          const created = await api('/sites', {
-            method: 'POST',
-            body: { name: site || 'Default', timezone: 'Europe/Moscow', tags: [] },
-          });
-          siteId = created.id;
-        }
-        await api('/devices', {
-          method: 'POST',
-          body: {
-            site_id: siteId,
-            name,
-            address,
-            device_type: typeValue,
-          },
-        });
-        closeDialog(wizard);
-        showToast(`${name} добавлено через API`);
-        await refreshDashboard();
-        return;
-      } catch (error) {
-        showToast(error.message || 'Не удалось создать устройство через API');
-      }
+    if (!accessToken || !apiOnline) {
+      showToast('API недоступен — устройство не добавлено');
+      return;
     }
 
-    const typeLabels = { server: 'Сервер', router: 'Сетевое оборудование', computer: 'Рабочая станция', ups: 'ИБП' };
-    const iconMap = { server: 'i-server', router: 'i-router', computer: 'i-monitor', ups: 'i-ups' };
-    const classMap = { server: 'server', router: 'router', computer: 'server', ups: 'ups' };
-    const article = document.createElement('article');
-    article.innerHTML = `<span class="device-cell"><i class="device-icon ${classMap[typeValue] || 'router'}">${icon(iconMap[typeValue] || 'i-router')}</i><span>${escapeHtml(name)}<small>${escapeHtml(address)}</small></span></span><span>${typeLabels[typeValue] || 'Определено автоматически'}</span><span>${escapeHtml(site)}</span><span><i class="state-dot ok"></i>Добавляется</span><span>только что</span>`;
-    $('#deviceList').insertBefore(article, $('.device-list article'));
-    const count = Number($('#deviceCount').textContent) + 1;
-    $('#deviceCount').textContent = String(count);
-    $('#navDeviceCount').textContent = String(count);
-    closeDialog(wizard);
-    showToast(`${name} добавлено в очередь мониторинга`);
-    setTimeout(() => {
-      const state = article.children[3];
-      state.innerHTML = '<i class="state-dot ok"></i>Доступно';
-      article.children[4].textContent = '5 сек назад';
-    }, 2500);
+    try {
+      let siteId = sitesCache.find((item) => item.name === site)?.id;
+      if (site === '__new__' || !siteId) {
+        const siteName = site === '__new__' ? (prompt('Имя новой площадки', 'Основная') || 'Основная') : (site || 'Основная');
+        const created = await api('/sites', {
+          method: 'POST',
+          body: { name: siteName, timezone: 'Europe/Moscow', tags: [] },
+        });
+        siteId = created.id;
+        sitesCache.push(created);
+        populateWizardSites(sitesCache);
+      }
+      await api('/devices', {
+        method: 'POST',
+        body: {
+          site_id: siteId,
+          name,
+          address,
+          device_type: typeValue,
+        },
+      });
+      closeDialog(wizard);
+      showToast(`${name} добавлено в инвентарь портала`);
+      await refreshDashboard();
+    } catch (error) {
+      showToast(error.message || 'Не удалось создать устройство');
+    }
   }
 
   function escapeHtml(value) {

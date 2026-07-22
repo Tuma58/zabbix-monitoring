@@ -9,30 +9,6 @@ from app.services.audit import record_audit
 
 router = APIRouter()
 
-# Stage 1 serves portal-derived problem cards until Zabbix event sync lands.
-DEMO_PROBLEMS = [
-    {
-        "event_id": "10001",
-        "severity": "high",
-        "host": "core-sw-01",
-        "site": "Москва",
-        "summary": "Interface eth1 utilization > 90%",
-        "duration": "24м",
-        "acknowledged": False,
-        "owner": None,
-    },
-    {
-        "event_id": "10002",
-        "severity": "average",
-        "host": "ups-srv-01",
-        "site": "Санкт-Петербург",
-        "summary": "Battery runtime below threshold",
-        "duration": "1ч 12м",
-        "acknowledged": False,
-        "owner": None,
-    },
-]
-
 
 @router.get("", response_model=list[ProblemOut])
 def list_problems(_: ViewerUser, db: DbSession) -> list[ProblemOut]:
@@ -51,8 +27,6 @@ def list_problems(_: ViewerUser, db: DbSession) -> list[ProblemOut]:
                 acknowledged=False,
             )
         )
-    if not problems:
-        return [ProblemOut(**item) for item in DEMO_PROBLEMS]
     return problems
 
 
@@ -64,22 +38,18 @@ def acknowledge_problem(
     user: OperatorUser,
     db: DbSession,
 ) -> ProblemOut:
-    problem = next((item for item in DEMO_PROBLEMS if item["event_id"] == event_id), None)
-    if problem is None and not event_id.startswith("portal-"):
+    if not event_id.startswith("portal-"):
         raise not_found("Problem not found")
-    if problem is None:
-        problem = {
-            "event_id": event_id,
-            "severity": "average",
-            "host": "unknown",
-            "site": "—",
-            "summary": payload.message or "Acknowledged",
-            "duration": "—",
-            "acknowledged": True,
-            "owner": user.email,
-        }
-    else:
-        problem = {**problem, "acknowledged": True, "owner": user.email}
+    problem = {
+        "event_id": event_id,
+        "severity": "average",
+        "host": "unknown",
+        "site": "—",
+        "summary": payload.message or "Acknowledged",
+        "duration": "—",
+        "acknowledged": True,
+        "owner": user.email,
+    }
     record_audit(
         db,
         actor_id=user.id,

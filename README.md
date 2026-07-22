@@ -18,6 +18,7 @@
 - [`api/`](api/) — FastAPI Stage 1 (auth, inventory stubs, dashboard, gateway);
 - [`dashboard/`](dashboard/) — адаптивный UI в фирменном стиле CoreSupport;
 - [установка на чистый VPS](docs/DEPLOYMENT.md);
+- [работа с dashboard и подключение Windows](docs/DASHBOARD.md);
 - [эксплуатация, резервное копирование и обновление](docs/OPERATIONS.md);
 - `compose.yaml` для PostgreSQL + Zabbix + API + dashboard;
 - `install.sh` для установки Docker и запуска контура на Ubuntu 22.04/24.04.

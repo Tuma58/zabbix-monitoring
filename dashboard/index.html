@@ -49,8 +49,8 @@
       <nav class="side-nav" aria-label="Основная навигация">
         <p class="nav-caption">Мониторинг</p>
         <a class="active" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
-        <a href="#devices"><svg><use href="#i-server"/></svg><span>Устройства</span><b id="navDeviceCount">128</b></a>
-        <a href="#problems"><svg><use href="#i-alert"/></svg><span>Проблемы</span><i id="navProblemCount">7</i></a>
+        <a href="#devices"><svg><use href="#i-server"/></svg><span>Устройства</span><b id="navDeviceCount">0</b></a>
+        <a href="#problems"><svg><use href="#i-alert"/></svg><span>Проблемы</span><i id="navProblemCount">0</i></a>
         <a href="#sites"><svg><use href="#i-map"/></svg><span>Площадки</span></a>
         <p class="nav-caption second">Управление</p>
         <button type="button" id="openSettings"><svg><use href="#i-sliders"/></svg><span>Настройки</span></button>
@@ -80,7 +80,7 @@
         </label>
         <div class="top-actions">
           <span class="sync-state" id="syncState"><span></span>Ожидание API</span>
-          <button class="icon-button has-badge" aria-label="Уведомления"><svg><use href="#i-bell"/></svg><i>3</i></button>
+          <button class="icon-button has-badge" aria-label="Уведомления"><svg><use href="#i-bell"/></svg></button>
           <button class="button primary" id="addDeviceTop"><svg><use href="#i-plus"/></svg>Добавить устройство</button>
         </div>
       </header>
@@ -89,11 +89,11 @@
         <section class="page-heading" id="overview">
           <div>
             <p class="eyebrow">Инфраструктура · 24/7</p>
-            <h1>Доброе утро, Николай</h1>
-            <p id="overviewSubtitle">Вся инфраструктура под контролем. Требуют внимания 7 событий.</p>
+            <h1 id="overviewGreeting">CoreSupport Monitor</h1>
+            <p id="overviewSubtitle">Загрузка данных…</p>
           </div>
           <div class="heading-actions">
-            <label class="compact-select"><span>Площадка</span><select id="siteFilter"><option value="all">Все площадки</option><option value="office">Главный офис</option><option value="dc">ЦОД Маяковский</option><option value="warehouse">Склад Восточный</option></select></label>
+            <label class="compact-select"><span>Площадка</span><select id="siteFilter"><option value="all">Все площадки</option></select></label>
             <label class="compact-select"><span>Период</span><select><option>Последние 24 часа</option><option>Последние 7 дней</option><option>Последние 30 дней</option></select></label>
           </div>
         </section>
@@ -102,30 +102,29 @@
           <article class="metric-card indigo">
             <div class="metric-icon"><svg><use href="#i-server"/></svg></div>
             <div class="metric-label">Всего устройств</div>
-            <div class="metric-value" id="deviceCount">128</div>
-            <div class="metric-note positive" id="deviceCountNote"><svg><use href="#i-check"/></svg>121 доступно</div>
+            <div class="metric-value" id="deviceCount">0</div>
+            <div class="metric-note positive" id="deviceCountNote"><svg><use href="#i-check"/></svg>нет устройств</div>
             <span class="metric-spark"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
           </article>
           <article class="metric-card green">
             <div class="metric-icon"><svg><use href="#i-activity"/></svg></div>
             <div class="metric-label">Доступность</div>
-            <div class="metric-value" id="availabilityValue">99,94<span>%</span></div>
-            <div class="metric-note positive" id="availabilityNote">+0,12% за месяц</div>
-            <div class="metric-progress"><span id="availabilityBar" style="width:99.94%"></span></div>
+            <div class="metric-value" id="availabilityValue">—<span>%</span></div>
+            <div class="metric-note positive" id="availabilityNote">Добавьте первое устройство</div>
+            <div class="metric-progress"><span id="availabilityBar" style="width:0%"></span></div>
           </article>
           <article class="metric-card terra">
             <div class="metric-icon"><svg><use href="#i-alert"/></svg></div>
             <div class="metric-label">Активные проблемы</div>
-            <div class="metric-value" id="problemCount">7</div>
-            <div class="metric-note warning" id="problemCountNote">2 требуют реакции</div>
+            <div class="metric-value" id="problemCount">0</div>
+            <div class="metric-note warning" id="problemCountNote">Активных проблем нет</div>
             <div class="severity-dots"><i class="high"></i><i class="high"></i><i></i><i></i><i></i><i></i><i></i></div>
           </article>
           <article class="metric-card blue">
             <div class="metric-icon"><svg><use href="#i-clock"/></svg></div>
             <div class="metric-label">Среднее время реакции</div>
-            <div class="metric-value">3<span> мин</span></div>
-            <div class="metric-note positive">Цель: менее 5 минут</div>
-            <span class="target-badge">SLA соблюдён</span>
+            <div class="metric-value">—<span> мин</span></div>
+            <div class="metric-note positive">Появится после первых событий</div>
           </article>
         </section>
 
@@ -135,7 +134,7 @@
               <div><p class="panel-kicker">Динамика</p><h2>Доступность инфраструктуры</h2></div>
               <div class="legend"><span><i class="current"></i>Текущий период</span><span><i class="previous"></i>Предыдущий</span></div>
             </div>
-            <div class="chart-summary"><strong>99,94%</strong><span><b>+0,12%</b> к предыдущему периоду</span></div>
+            <div class="chart-summary"><strong id="chartAvailability">—</strong><span id="chartAvailabilityNote">Нет данных за период</span></div>
             <div class="line-chart" role="img" aria-label="График доступности за 24 часа">
               <div class="y-labels"><span>100%</span><span>99,9%</span><span>99,8%</span><span>99,7%</span></div>
               <svg viewBox="0 0 720 210" preserveAspectRatio="none">
@@ -153,14 +152,14 @@
           <article class="panel status-panel">
             <div class="panel-head"><div><p class="panel-kicker">Состояние</p><h2>Устройства</h2></div><button class="text-button" data-scroll="#devices">Все устройства <svg><use href="#i-chevron"/></svg></button></div>
             <div class="donut-wrap">
-              <div class="donut"><div><strong>128</strong><span>всего</span></div></div>
-              <div class="status-list">
-                <div><span><i class="ok"></i>Доступно</span><b>121</b><small>94,5%</small></div>
-                <div><span><i class="warn"></i>С предупреждением</span><b>5</b><small>3,9%</small></div>
-                <div><span><i class="down"></i>Недоступно</span><b>2</b><small>1,6%</small></div>
+              <div class="donut"><div><strong id="donutDeviceTotal">0</strong><span>всего</span></div></div>
+              <div class="status-list" id="statusBreakdown">
+                <div><span><i class="ok"></i>Доступно</span><b id="statusAvailable">0</b><small>—</small></div>
+                <div><span><i class="warn"></i>С предупреждением</span><b id="statusDegraded">0</b><small>—</small></div>
+                <div><span><i class="down"></i>Недоступно</span><b id="statusFailed">0</b><small>—</small></div>
               </div>
             </div>
-            <div class="type-row"><span><svg><use href="#i-server"/></svg>Серверы <b>24</b></span><span><svg><use href="#i-router"/></svg>Сеть <b>46</b></span><span><svg><use href="#i-monitor"/></svg>ПК <b>52</b></span><span><svg><use href="#i-ups"/></svg>ИБП <b>6</b></span></div>
+            <div class="type-row" id="typeBreakdown"><span>Добавьте устройства через мастер</span></div>
           </article>
         </section>
 
@@ -173,9 +172,7 @@
             <table class="problems-table">
               <thead><tr><th>Важность</th><th>Проблема</th><th>Устройство</th><th>Площадка</th><th>Длительность</th><th><span class="sr-only">Действия</span></th></tr></thead>
               <tbody id="problemsBody">
-                <tr data-site="dc"><td><span class="severity disaster">Критическая</span></td><td><strong>RAID-массив в деградированном состоянии</strong><small>Свободен только один резервный диск</small></td><td><span class="device-cell"><i class="device-icon server"><svg><use href="#i-server"/></svg></i><span>srv-db-01<small>10.20.1.12</small></span></span></td><td>ЦОД Маяковский</td><td>18 мин</td><td><button class="row-action acknowledge" data-event-id="demo-1">Принять</button></td></tr>
-                <tr data-site="office"><td><span class="severity high">Высокая</span></td><td><strong>Высокая загрузка канала WAN</strong><small>Использование выше 92% в течение 15 минут</small></td><td><span class="device-cell"><i class="device-icon router"><svg><use href="#i-router"/></svg></i><span>rt-office-01<small>10.10.0.1</small></span></span></td><td>Главный офис</td><td>26 мин</td><td><button class="row-action acknowledge" data-event-id="demo-2">Принять</button></td></tr>
-                <tr data-site="warehouse"><td><span class="severity average">Средняя</span></td><td><strong>Низкий заряд батареи ИБП</strong><small>Оставшееся время работы: 14 минут</small></td><td><span class="device-cell"><i class="device-icon ups"><svg><use href="#i-ups"/></svg></i><span>ups-stock-02<small>10.30.2.16</small></span></span></td><td>Склад Восточный</td><td>1 ч 12 мин</td><td><button class="row-action acknowledge" data-event-id="demo-3">Принять</button></td></tr>
+                <tr class="empty-row"><td colspan="6">Активных проблем нет</td></tr>
               </tbody>
             </table>
           </div>
@@ -184,9 +181,7 @@
         <section id="sites" class="section-block">
           <div class="section-head"><div><p class="panel-kicker">География</p><h2>Площадки</h2></div><button class="button secondary" id="addSite"><svg><use href="#i-plus"/></svg>Добавить площадку</button></div>
           <div class="site-grid" id="siteGrid">
-            <article class="site-card" data-site-card="office"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health ok">В норме</span></div><h3>Главный офис</h3><p>Пенза · proxy-office</p><div class="site-stats"><span><b>68</b> устройств</span><span><b>1</b> проблема</span></div><div class="site-bar"><span style="width:98%"></span></div></article>
-            <article class="site-card" data-site-card="dc"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health attention">Требует внимания</span></div><h3>ЦОД Маяковский</h3><p>Москва · proxy-dc-msk</p><div class="site-stats"><span><b>42</b> устройства</span><span><b>4</b> проблемы</span></div><div class="site-bar attention"><span style="width:91%"></span></div></article>
-            <article class="site-card" data-site-card="warehouse"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health ok">В норме</span></div><h3>Склад Восточный</h3><p>Пенза · proxy-stock</p><div class="site-stats"><span><b>18</b> устройств</span><span><b>2</b> проблемы</span></div><div class="site-bar"><span style="width:96%"></span></div></article>
+            <article class="site-card empty-state"><p>Площадок пока нет. Создайте первую при добавлении устройства.</p></article>
           </div>
         </section>
 
@@ -194,9 +189,7 @@
           <div class="panel-head"><div><p class="panel-kicker">Каталог</p><h2>Последние устройства</h2></div><button class="button primary" id="addDeviceInline"><svg><use href="#i-plus"/></svg>Добавить устройство</button></div>
           <div class="device-list" id="deviceList">
             <div class="device-list-head"><span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Последние данные</span></div>
-            <article><span class="device-cell"><i class="device-icon server"><svg><use href="#i-server"/></svg></i><span>srv-app-02<small>10.20.1.22</small></span></span><span>Linux-сервер</span><span>ЦОД Маяковский</span><span><i class="state-dot ok"></i>Доступно</span><span>12 сек назад</span></article>
-            <article><span class="device-cell"><i class="device-icon router"><svg><use href="#i-router"/></svg></i><span>sw-office-03<small>10.10.1.13</small></span></span><span>Коммутатор</span><span>Главный офис</span><span><i class="state-dot ok"></i>Доступно</span><span>18 сек назад</span></article>
-            <article><span class="device-cell"><i class="device-icon ups"><svg><use href="#i-ups"/></svg></i><span>ups-stock-02<small>10.30.2.16</small></span></span><span>ИБП</span><span>Склад Восточный</span><span><i class="state-dot warn"></i>Предупреждение</span><span>28 сек назад</span></article>
+            <article class="empty-state"><span>Устройств пока нет. Нажмите «Добавить устройство».</span></article>
           </div>
         </section>
 
@@ -222,7 +215,7 @@
               <div class="form-grid two">
                 <label class="field"><span>Понятное имя <b>*</b></span><input name="name" id="deviceName" placeholder="Например, Коммутатор серверной" required><small>Будет видно операторам на dashboard</small></label>
                 <label class="field"><span>IP-адрес или FQDN <b>*</b></span><input name="address" id="deviceAddress" placeholder="10.20.1.15" required inputmode="url"><small>Адрес в management-сети</small></label>
-                <label class="field"><span>Площадка <b>*</b></span><select name="site" id="deviceSite" required><option value="">Выберите площадку</option><option>Главный офис</option><option>ЦОД Маяковский</option><option>Склад Восточный</option></select></label>
+                <label class="field"><span>Площадка <b>*</b></span><select name="site" id="deviceSite" required><option value="">Выберите или создайте площадку</option></select></label>
                 <label class="field"><span>Тип устройства <b>*</b></span><select name="type" id="deviceType" required><option value="">Определить автоматически</option><option value="server">Сервер</option><option value="router">Сетевое оборудование</option><option value="computer">Рабочая станция</option><option value="ups">ИБП</option></select></label>
               </div>
               <div class="inline-note"><svg><use href="#i-shield"/></svg><div><strong>Безопасная проверка</strong><span>Система проверит только указанный адрес с назначенного Zabbix proxy.</span></div></div>
@@ -237,7 +230,7 @@
               </fieldset>
               <div class="form-grid two connection-fields">
                 <label class="field"><span>Профиль подключения</span><select id="credentialProfile"><option>SNMP Core · authPriv</option><option>SNMP UPS · authPriv</option><option>Agent PSK · office</option></select><small>Секреты хранятся зашифрованно</small></label>
-                <label class="field"><span>Zabbix proxy</span><select id="proxy"><option>Выбрать по площадке</option><option>proxy-office</option><option>proxy-dc-msk</option><option>proxy-stock</option></select><small>Автоматически доступный для площадки</small></label>
+                <label class="field"><span>Zabbix proxy</span><select id="proxy"><option value="">По умолчанию (сервер)</option></select><small>Оставьте пустым для прямого подключения к Zabbix server</small></label>
               </div>
               <button type="button" class="text-button add-profile" data-toast="Создание профиля будет доступно администратору"><svg><use href="#i-plus"/></svg>Создать новый профиль</button>
             </section>
@@ -267,10 +260,10 @@
               <dl class="preview-list">
                 <div><dt>Площадка</dt><dd id="previewSite">—</dd></div>
                 <div><dt>Способ подключения</dt><dd id="previewProtocol">SNMPv3</dd></div>
-                <div><dt>Найдена модель</dt><dd>APC Smart-UPS SRT 3000</dd></div>
-                <div><dt>Zabbix proxy</dt><dd id="previewProxy">По площадке</dd></div>
-                <div><dt>Шаблон мониторинга</dt><dd><span class="template-chip">UPS APC by SNMP</span></dd></div>
-                <div><dt>Будем контролировать</dt><dd>Доступность, заряд, нагрузку, runtime, входное напряжение и alarms</dd></div>
+                <div><dt>Найдена модель</dt><dd id="previewModel">—</dd></div>
+                <div><dt>Zabbix proxy</dt><dd id="previewProxy">Сервер по умолчанию</dd></div>
+                <div><dt>Шаблон мониторинга</dt><dd><span class="template-chip" id="previewTemplate">Будет выбран автоматически</span></dd></div>
+                <div><dt>Будем контролировать</dt><dd id="previewMetrics">Доступность и базовые метрики ОС</dd></div>
               </dl>
               <label class="confirm-check"><input type="checkbox" id="startMonitoring" checked><span><svg><use href="#i-check"/></svg></span><span><b>Сразу начать мониторинг</b><small>Первые данные появятся в течение 2–5 минут</small></span></label>
             </section>
@@ -285,12 +278,12 @@
     <div class="modal-shell">
       <header class="modal-head"><div><p class="eyebrow">Управление</p><h2 id="settingsTitle">Настройки мониторинга</h2><p>Подключения, площадки и правила в одном месте.</p></div><button class="icon-button modal-close" data-close="settingsDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
       <div class="settings-grid">
-        <button data-toast="Соединение с Zabbix API успешно"><i class="setting-icon indigo"><svg><use href="#i-activity"/></svg></i><span><b>Подключение к Zabbix</b><small>API доступен · версия 7.0 · 18 мс</small></span><em class="setting-ok">Подключено</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Открыт раздел площадок"><i class="setting-icon green"><svg><use href="#i-map"/></svg></i><span><b>Площадки и proxy</b><small>3 площадки · 3 активных proxy</small></span><em>3</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Открыты защищённые профили"><i class="setting-icon terra"><svg><use href="#i-shield"/></svg></i><span><b>Профили подключения</b><small>SNMP, Agent PSK и IPMI</small></span><em>6</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Открыты политики мониторинга"><i class="setting-icon blue"><svg><use href="#i-sliders"/></svg></i><span><b>Политики мониторинга</b><small>Автовыбор шаблонов и интервалов</small></span><em>8</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Раздел пользователей будет подключён к RBAC"><i class="setting-icon indigo"><svg><use href="#i-eye"/></svg></i><span><b>Пользователи и роли</b><small>Администраторы, операторы, наблюдатели</small></span><em>12</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Резервная копия актуальна"><i class="setting-icon green"><svg><use href="#i-check"/></svg></i><span><b>Состояние системы</b><small>Backup 6 ч назад · диск свободен на 72%</small></span><em class="setting-ok">В норме</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Соединение с Zabbix API"><i class="setting-icon indigo"><svg><use href="#i-activity"/></svg></i><span><b>Подключение к Zabbix</b><small id="settingsZabbixMeta">Проверка…</small></span><em class="setting-ok" id="settingsZabbixStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Открыт раздел площадок"><i class="setting-icon green"><svg><use href="#i-map"/></svg></i><span><b>Площадки и proxy</b><small id="settingsSitesMeta">0 площадок</small></span><em id="settingsSitesCount">0</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Открыты защищённые профили"><i class="setting-icon terra"><svg><use href="#i-shield"/></svg></i><span><b>Профили подключения</b><small>SNMP, Agent PSK и IPMI</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Открыты политики мониторинга"><i class="setting-icon blue"><svg><use href="#i-sliders"/></svg></i><span><b>Политики мониторинга</b><small>Автовыбор шаблонов и интервалов</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Раздел пользователей будет подключён к RBAC"><i class="setting-icon indigo"><svg><use href="#i-eye"/></svg></i><span><b>Пользователи и роли</b><small>Администраторы, операторы, наблюдатели</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Состояние системы"><i class="setting-icon green"><svg><use href="#i-check"/></svg></i><span><b>Состояние системы</b><small id="settingsSystemMeta">API и Zabbix</small></span><em class="setting-ok" id="settingsSystemStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
       </div>
       <footer class="settings-footer"><span><svg><use href="#i-shield"/></svg>Секреты никогда не отображаются после сохранения</span><button class="button primary" data-close="settingsDialog">Готово</button></footer>
     </div>
