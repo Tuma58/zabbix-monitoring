@@ -84,12 +84,26 @@ install_docker() {
 }
 
 prefer_iptables_legacy() {
-  # Смешение nft/legacy iptables ломает Docker bridge forwarding на части хостов.
+  # Смешение nft/legacy iptables ломает Docker bridge forwarding и создание сетей
+  # (ошибки вида "DOCKER-FORWARD ... No chain/target/match by that name").
+  local changed=0
   if [[ -x /usr/sbin/iptables-legacy ]]; then
-    update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 || true
+    local current
+    current="$(readlink -f "$(command -v iptables)" 2>/dev/null || true)"
+    if [[ "${current}" != "/usr/sbin/iptables-legacy" ]]; then
+      update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 && changed=1 || true
+    fi
   fi
   if [[ -x /usr/sbin/ip6tables-legacy ]]; then
     update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1 || true
+  fi
+
+  # Если переключили backend, а Docker уже работает под systemd — перезапускаем,
+  # чтобы daemon пересоздал свои цепочки iptables.
+  if (( changed )) && command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    log "iptables переключён на legacy; перезапуск Docker для пересоздания цепочек"
+    systemctl restart docker || true
+    sleep 2
   fi
 }
 
@@ -308,7 +322,37 @@ start_stack() {
   compose up -d postgres
   wait_for_postgres
   ensure_portal_database
-  compose up -d --remove-orphans
+  if ! compose up -d --remove-orphans; then
+    log "Сбой запуска (вероятно iptables/сеть Docker); перезапуск Docker и повтор"
+    reset_docker_networking
+    compose up -d --remove-orphans \
+      || fail "Не удалось запустить стек; смотрите: docker compose logs"
+  fi
+}
+
+# Пересоздаёт сетевой стек Docker после ошибок iptables (DOCKER-FORWARD и т.п.).
+reset_docker_networking() {
+  compose down --remove-orphans >/dev/null 2>&1 || true
+  docker network rm netmon-backend >/dev/null 2>&1 || true
+  if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    systemctl restart docker || true
+    sleep 3
+  else
+    if pgrep -x dockerd >/dev/null 2>&1; then
+      pkill -x dockerd || true
+      sleep 2
+    fi
+    dockerd --host=unix:///var/run/docker.sock >/var/log/dockerd.log 2>&1 &
+    local attempts=0
+    while (( attempts < 30 )); do
+      docker info >/dev/null 2>&1 && break
+      attempts=$((attempts + 1))
+      sleep 1
+    done
+  fi
+  compose up -d postgres >/dev/null 2>&1 || true
+  wait_for_postgres
+  ensure_portal_database
 }
 
 wait_for_postgres() {
