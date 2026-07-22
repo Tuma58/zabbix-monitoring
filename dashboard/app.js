@@ -29,6 +29,8 @@
   let selectedCredentialProfileId = '';
 
   const NAV_SECTIONS = ['overview', 'devices', 'problems', 'sites'];
+
+  function icon(id) {
     return `<svg><use href="#${id}"/></svg>`;
   }
 
@@ -451,6 +453,37 @@
     return map[deviceType] || 'Уточните тип / производителя';
   }
 
+  function navigateToSection(sectionId) {
+    const target = document.getElementById(sectionId);
+    if (!target) return;
+    window.location.hash = sectionId;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    syncNavFromHash();
+    body.classList.remove('nav-open');
+  }
+
+  async function createSiteInteractive() {
+    if (!accessToken || !apiOnline) {
+      const loggedIn = await promptLogin('Войдите, чтобы добавить площадку');
+      if (!loggedIn) return;
+    }
+    const name = (window.prompt('Название площадки', 'Основная') || '').trim();
+    if (!name) return;
+    try {
+      const created = await api('/sites', {
+        method: 'POST',
+        body: { name, timezone: 'Europe/Moscow', tags: [] },
+      });
+      sitesCache.push(created);
+      populateWizardSites(sitesCache);
+      await refreshDashboard();
+      navigateToSection('sites');
+      showToast(`Площадка «${name}» создана`);
+    } catch (error) {
+      showToast(error.message || 'Не удалось создать площадку');
+    }
+  }
+
   function syncNavFromHash() {
     const hash = (window.location.hash || '#overview').replace('#', '');
     const activeId = NAV_SECTIONS.includes(hash) ? hash : 'overview';
@@ -812,11 +845,15 @@
     setTimeout(() => $('#deviceName').focus(), 80);
   }));
 
-  $('#openSettings').addEventListener('click', () => {
+  $('#openSettings')?.addEventListener('click', () => {
     body.classList.remove('nav-open');
+    if (!settings) {
+      showToast('Диалог настроек не найден');
+      return;
+    }
     openDialog(settings);
   });
-  $('#runProbe').addEventListener('click', () => { runProbe(); });
+  $('#runProbe')?.addEventListener('click', () => { runProbe(); });
   $$('input[name="protocol"]').forEach((input) => input.addEventListener('change', updateConnectionGuide));
   $('#deviceType')?.addEventListener('change', () => {
     applySuggestedProtocol($('#deviceType').value || '');
@@ -831,21 +868,43 @@
   $('#credentialProfile')?.addEventListener('change', (event) => {
     selectedCredentialProfileId = event.target.value;
   });
-  nextButton.addEventListener('click', advance);
-  backButton.addEventListener('click', () => { if (currentStep > 1) { currentStep -= 1; renderStep(); } });
+  nextButton?.addEventListener('click', advance);
+  backButton?.addEventListener('click', () => { if (currentStep > 1) { currentStep -= 1; renderStep(); } });
 
-  $$('[data-close]').forEach((button) => button.addEventListener('click', () => closeDialog($(`#${button.dataset.close}`))));
-  [wizard, settings].forEach((dialog) => dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) closeDialog(dialog);
+  $$('[data-close]').forEach((button) => button.addEventListener('click', () => {
+    const dialog = $(`#${button.dataset.close}`);
+    if (button.dataset.close === 'loginDialog') closeLoginDialog(false);
+    else closeDialog(dialog);
   }));
+  [wizard, settings, $('#loginDialog')].filter(Boolean).forEach((dialog) => {
+    dialog.addEventListener('click', (event) => {
+      if (event.target !== dialog) return;
+      if (dialog.id === 'loginDialog') closeLoginDialog(false);
+      else closeDialog(dialog);
+    });
+    dialog.addEventListener('close', () => {
+      if (dialog.id === 'loginDialog' && typeof dialog._loginResolve === 'function') {
+        dialog._loginResolve(false);
+        dialog._loginResolve = null;
+      }
+    });
+  });
 
   bindAcknowledgeButtons();
   $$('[data-toast]').forEach((button) => button.addEventListener('click', () => showToast(button.dataset.toast)));
-  $$('[data-scroll]').forEach((button) => button.addEventListener('click', () => $(button.dataset.scroll)?.scrollIntoView({ behavior: 'smooth' })));
-  $('#siteFilter').addEventListener('change', (event) => filterBySite(event.target.value));
-  $('#globalSearch').addEventListener('search', (event) => searchDashboard(event.target.value));
-  $('#globalSearch').addEventListener('keydown', (event) => { if (event.key === 'Enter') searchDashboard(event.target.value); });
-  $('#addSite').addEventListener('click', () => showToast('Добавление площадки доступно в настройках'));
+  $$('[data-scroll]').forEach((button) => button.addEventListener('click', () => {
+    const selector = button.dataset.scroll;
+    const id = selector?.startsWith('#') ? selector.slice(1) : selector;
+    if (id) navigateToSection(id);
+  }));
+  $$('[data-nav-section]').forEach((button) => button.addEventListener('click', () => {
+    closeDialog(settings);
+    navigateToSection(button.dataset.navSection);
+  }));
+  $('#siteFilter')?.addEventListener('change', (event) => filterBySite(event.target.value));
+  $('#globalSearch')?.addEventListener('search', (event) => searchDashboard(event.target.value));
+  $('#globalSearch')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') searchDashboard(event.target.value); });
+  $('#addSite')?.addEventListener('click', () => { createSiteInteractive(); });
   $('#reconnectApi')?.addEventListener('click', () => {
     promptLogin().then((ok) => {
       if (!ok) return;
@@ -857,24 +916,21 @@
     event.preventDefault();
     closeLoginDialog(true);
   });
-  $$('[data-close="loginDialog"]').forEach((button) => button.addEventListener('click', () => closeLoginDialog(false)));
-  $('#loginDialog')?.addEventListener('click', (event) => {
-    if (event.target.id === 'loginDialog') closeLoginDialog(false);
-  });
 
-  $('#menuButton').addEventListener('click', () => body.classList.add('nav-open'));
-  $('#sidebarClose').addEventListener('click', () => body.classList.remove('nav-open'));
-  $('#sidebarScrim').addEventListener('click', () => body.classList.remove('nav-open'));
-  $$('.side-nav a').forEach((link) => link.addEventListener('click', () => {
-    body.classList.remove('nav-open');
-    syncNavFromHash();
+  $('#menuButton')?.addEventListener('click', () => body.classList.add('nav-open'));
+  $('#sidebarClose')?.addEventListener('click', () => body.classList.remove('nav-open'));
+  $('#sidebarScrim')?.addEventListener('click', () => body.classList.remove('nav-open'));
+  $$('.side-nav a[href^="#"]').forEach((link) => link.addEventListener('click', (event) => {
+    event.preventDefault();
+    const sectionId = link.getAttribute('href')?.slice(1);
+    if (sectionId) navigateToSection(sectionId);
   }));
   window.addEventListener('hashchange', syncNavFromHash);
 
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
-      $('#globalSearch').focus();
+      $('#globalSearch')?.focus();
     }
   });
 
