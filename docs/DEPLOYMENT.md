@@ -23,9 +23,9 @@ PostgreSQL, Zabbix server, Zabbix web, custom API (`/api/v1`) и dashboard.
   (bootstrap по умолчанию публикует trapper на `0.0.0.0` — ограничьте firewall/
   security group сетями agent/proxy);
 - `443/TCP`: custom portal после добавления Caddy;
-- `8080/TCP`: Zabbix UI, по умолчанию доступен с внешнего IP (`0.0.0.0`);
-- `8081/TCP`: dashboard, по умолчанию доступен с внешнего IP;
-- `8000/TCP`: custom API docs/health, по умолчанию доступен с внешнего IP;
+- `7080/TCP`: Zabbix UI, по умолчанию доступен с внешнего IP (`0.0.0.0`);
+- `7081/TCP`: dashboard, по умолчанию доступен с внешнего IP;
+- `7000/TCP`: custom API docs/health, по умолчанию доступен с внешнего IP;
 - от VPS/proxy к устройствам: ICMP, `10050/TCP`, `161/UDP`, при необходимости
   `623/UDP` IPMI и vendor API ports.
 
@@ -76,7 +76,7 @@ sudo /opt/netmon/install.sh
 Допустимые параметры задаются environment variables:
 
 ```bash
-sudo PHP_TZ=Europe/Moscow ZABBIX_WEB_BIND=127.0.0.1 ZABBIX_WEB_PORT=8080 /opt/netmon/install.sh
+sudo PHP_TZ=Europe/Moscow ZABBIX_WEB_BIND=0.0.0.0 ZABBIX_WEB_PORT=7080 /opt/netmon/install.sh
 ```
 
 ## Что делает скрипт
@@ -95,10 +95,10 @@ sudo PHP_TZ=Europe/Moscow ZABBIX_WEB_BIND=127.0.0.1 ZABBIX_WEB_PORT=8080 /opt/ne
 При loopback bind выполните на рабочем компьютере:
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 user@VPS_IP
+ssh -L 7080:127.0.0.1:7080 user@VPS_IP
 ```
 
-Откройте `http://127.0.0.1:8080`, войдите как `Admin` / `zabbix` и немедленно:
+Откройте `http://127.0.0.1:7080`, войдите как `Admin` / `zabbix` и немедленно:
 
 1. смените пароль;
 2. создайте отдельного администратора;
@@ -109,11 +109,11 @@ ssh -L 8080:127.0.0.1:8080 user@VPS_IP
 Для просмотра кастомного dashboard и API откройте туннели:
 
 ```bash
-ssh -L 8081:127.0.0.1:8081 -L 8000:127.0.0.1:8000 user@VPS_IP
+ssh -L 7081:127.0.0.1:7081 -L 7000:127.0.0.1:7000 user@VPS_IP
 ```
 
-- Dashboard: `http://127.0.0.1:8081` (проксирует `/api/` на custom API)
-- OpenAPI UI: `http://127.0.0.1:8000/api/v1/docs`
+- Dashboard: `http://127.0.0.1:7081` (проксирует `/api/` на custom API)
+- OpenAPI UI: `http://127.0.0.1:7000/api/v1/docs`
 - Portal login: значения `BOOTSTRAP_ADMIN_*` из `.env`
 
 ## Проверка
@@ -124,9 +124,9 @@ ssh -L 8081:127.0.0.1:8081 -L 8000:127.0.0.1:8000 user@VPS_IP
 cd /opt/netmon
 sudo docker compose ps
 sudo docker compose logs --tail=100 zabbix-server
-curl -I http://127.0.0.1:8080
-curl -fsS http://127.0.0.1:8000/api/v1/health/live
-curl -fsS http://127.0.0.1:8081/api/v1/health/live
+curl -I http://127.0.0.1:7080
+curl -fsS http://127.0.0.1:7000/api/v1/health/live
+curl -fsS http://127.0.0.1:7081/api/v1/health/live
 ```
 
 Ожидается: PostgreSQL/API `healthy`, Zabbix server/web — `Up`, HTTP-ответ от

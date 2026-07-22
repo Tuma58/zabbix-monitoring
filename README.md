@@ -44,13 +44,13 @@ sudo /opt/netmon/install.sh
 cd /opt/netmon && sudo git pull --ff-only && sudo ./install.sh
 ```
 
-По умолчанию Zabbix UI (`:8080`), dashboard (`:8081`) и API (`:8000`) слушаются
+По умолчанию Zabbix UI (`:7080`), dashboard (`:7081`) и API (`:7000`) слушаются
 на `0.0.0.0` и доступны по внешнему IP VPS. После установки скрипт печатает
 точные URL и секреты.
 
-- Zabbix UI: `http://VPS_IP:8080` (`Admin` / `zabbix`, смените пароль);
-- Dashboard: `http://VPS_IP:8081`;
-- API docs: `http://VPS_IP:8000/api/v1/docs`.
+- Zabbix UI: `http://VPS_IP:7080` (`Admin` / `zabbix`, смените пароль);
+- Dashboard: `http://VPS_IP:7081`;
+- API docs: `http://VPS_IP:7000/api/v1/docs`.
 
 Учётная запись портала задаётся в `.env`
 (`BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`).

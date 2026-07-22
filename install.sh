@@ -179,14 +179,28 @@ ensure_required_env_vars() {
   ensure_env_default "ZABBIX_ENABLED" "false"
   ensure_env_default "ZABBIX_API_URL" "http://zabbix-web:8080/api_jsonrpc.php"
   ensure_env_default "API_BIND" "0.0.0.0"
-  ensure_env_default "API_PORT" "8000"
+  ensure_env_default "API_PORT" "7000"
   ensure_env_default "DASHBOARD_BIND" "0.0.0.0"
-  ensure_env_default "DASHBOARD_PORT" "8081"
+  ensure_env_default "DASHBOARD_PORT" "7081"
   ensure_env_default "ZABBIX_WEB_BIND" "0.0.0.0"
-  ensure_env_default "ZABBIX_WEB_PORT" "8080"
+  ensure_env_default "ZABBIX_WEB_PORT" "7080"
   ensure_env_default "ZABBIX_SERVER_BIND" "0.0.0.0"
   ensure_env_default "ZABBIX_SERVER_PORT" "10051"
   ensure_env_default "PHP_TZ" "Europe/Moscow"
+
+  # Миграция со старых портов 80xx/8000 на 70xx.
+  if grep -q '^ZABBIX_WEB_PORT=8080$' "${ENV_FILE}"; then
+    sed -i 's/^ZABBIX_WEB_PORT=8080$/ZABBIX_WEB_PORT=7080/' "${ENV_FILE}"
+    log "ZABBIX_WEB_PORT переключён на 7080"
+  fi
+  if grep -q '^DASHBOARD_PORT=8081$' "${ENV_FILE}"; then
+    sed -i 's/^DASHBOARD_PORT=8081$/DASHBOARD_PORT=7081/' "${ENV_FILE}"
+    log "DASHBOARD_PORT переключён на 7081"
+  fi
+  if grep -q '^API_PORT=8000$' "${ENV_FILE}"; then
+    sed -i 's/^API_PORT=8000$/API_PORT=7000/' "${ENV_FILE}"
+    log "API_PORT переключён на 7000"
+  fi
   chmod 600 "${ENV_FILE}"
 }
 
@@ -198,9 +212,9 @@ ensure_public_web_binds() {
   public_ip="$(detect_public_ip)"
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
-  dash_port="${DASHBOARD_PORT:-8081}"
-  api_port="${API_PORT:-8000}"
-  web_port="${ZABBIX_WEB_PORT:-8080}"
+  dash_port="${DASHBOARD_PORT:-7081}"
+  api_port="${API_PORT:-7000}"
+  web_port="${ZABBIX_WEB_PORT:-7080}"
 
   # Обновляем bind веб-сервисов на 0.0.0.0, если ещё loopback.
   if grep -q '^ZABBIX_WEB_BIND=127.0.0.1$' "${ENV_FILE}"; then
@@ -266,15 +280,15 @@ create_environment() {
     printf 'PHP_TZ=%s\n' "${PHP_TZ:-Europe/Moscow}"
     # Веб-интерфейсы сразу доступны по внешнему IP VPS.
     printf 'ZABBIX_WEB_BIND=%s\n' "${ZABBIX_WEB_BIND:-0.0.0.0}"
-    printf 'ZABBIX_WEB_PORT=%s\n' "${ZABBIX_WEB_PORT:-8080}"
+    printf 'ZABBIX_WEB_PORT=%s\n' "${ZABBIX_WEB_PORT:-7080}"
     # Trapper по умолчанию тоже на всех интерфейсах — для agent/proxy.
     printf 'ZABBIX_SERVER_BIND=%s\n' "${ZABBIX_SERVER_BIND:-0.0.0.0}"
     printf 'ZABBIX_SERVER_PORT=%s\n' "${ZABBIX_SERVER_PORT:-10051}"
     printf 'DASHBOARD_BIND=%s\n' "${DASHBOARD_BIND:-0.0.0.0}"
-    printf 'DASHBOARD_PORT=%s\n' "${DASHBOARD_PORT:-8081}"
+    printf 'DASHBOARD_PORT=%s\n' "${DASHBOARD_PORT:-7081}"
     printf 'API_BIND=%s\n' "${API_BIND:-0.0.0.0}"
-    printf 'API_PORT=%s\n' "${API_PORT:-8000}"
-    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://${public_ip}:8081,http://${public_ip}:8080,http://127.0.0.1:8081,http://localhost:8081}"
+    printf 'API_PORT=%s\n' "${API_PORT:-7000}"
+    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://${public_ip}:7081,http://${public_ip}:7080,http://127.0.0.1:7081,http://localhost:7081}"
     printf 'PROBE_NETWORK_ALLOWLIST=%s\n' "${PROBE_NETWORK_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
     printf 'ZBX_CACHESIZE=128M\n'
     printf 'ZBX_HISTORYCACHESIZE=64M\n'
@@ -408,9 +422,9 @@ print_next_steps() {
     host_label="${public_ip}"
   fi
 
-  zabbix_url="http://${host_label}:${ZABBIX_WEB_PORT:-8080}"
-  dashboard_url="http://${host_label}:${DASHBOARD_PORT:-8081}"
-  api_url="http://${host_label}:${API_PORT:-8000}/api/v1"
+  zabbix_url="http://${host_label}:${ZABBIX_WEB_PORT:-7080}"
+  dashboard_url="http://${host_label}:${DASHBOARD_PORT:-7081}"
+  api_url="http://${host_label}:${API_PORT:-7000}/api/v1"
 
   printf '\n'
   log "============================================================"
@@ -443,9 +457,9 @@ print_next_steps() {
   log "  Пароль Zabbix UI:          zabbix   (смените сразу после входа)"
   printf '\n'
   log "Сетевые привязки:"
-  log "  Zabbix web:   ${ZABBIX_WEB_BIND:-0.0.0.0}:${ZABBIX_WEB_PORT:-8080}"
-  log "  Dashboard:    ${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-8081}"
-  log "  API:          ${API_BIND:-0.0.0.0}:${API_PORT:-8000}"
+  log "  Zabbix web:   ${ZABBIX_WEB_BIND:-0.0.0.0}:${ZABBIX_WEB_PORT:-7080}"
+  log "  Dashboard:    ${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-7081}"
+  log "  API:          ${API_BIND:-0.0.0.0}:${API_PORT:-7000}"
   log "  Trapper:      ${ZABBIX_SERVER_BIND:-0.0.0.0}:${ZABBIX_SERVER_PORT:-10051}"
   printf '\n'
   log "Полезные команды:"

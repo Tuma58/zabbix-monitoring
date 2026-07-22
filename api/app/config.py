@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     zabbix_api_timeout_seconds: float = 10.0
     zabbix_enabled: bool = False
 
-    cors_origins: str = "http://127.0.0.1:8081,http://localhost:8081"
+    cors_origins: str = "http://127.0.0.1:7081,http://localhost:7081"
     probe_network_allowlist: str = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
     @field_validator("cors_origins", mode="before")
