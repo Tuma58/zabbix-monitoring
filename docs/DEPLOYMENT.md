@@ -35,6 +35,27 @@ PostgreSQL, Zabbix server, Zabbix web, custom API (`/api/v1`) и dashboard.
 работает на тех же портах: сервисы слушают `0.0.0.0`. CORS и SAN сертификата
 включают этот адрес автоматически.
 
+### Проброс портов на роутере (NAT / FiOS)
+
+Если VPS/сервер за NAT, на роутере нужны forward на внутренний IP хоста:
+
+| Внешний порт | Куда | Назначение |
+|---|---|---|
+| 7080 | host:7080 | Zabbix HTTP |
+| 7081 | host:7081 | Dashboard HTTP |
+| 7000 | host:7000 | API HTTP |
+| 7443 | host:7443 | Zabbix HTTPS |
+| 7444 | host:7444 | Dashboard HTTPS |
+| 7445 | host:7445 | API HTTPS |
+| 10051 | host:10051 | Zabbix trapper (только нужные сети) |
+
+Без проброса `7081` dashboard «за NATом» не откроется. Без `7443–7445`
+не откроется HTTPS. Проверка на самом хосте:
+
+```bash
+sudo /opt/netmon/scripts/diagnose-netmon.sh
+```
+
 ## Сеть Compose
 
 Сервисы общаются в сети `netmon-backend`. Веб-порты UI/API по умолчанию

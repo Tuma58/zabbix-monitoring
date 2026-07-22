@@ -490,7 +490,7 @@ start_stack() {
 
   log "Сборка образа API и запуск стека мониторинга"
   # Тянем только публикуемые образы; netmon-api собирается локально.
-  compose pull postgres zabbix-server zabbix-web dashboard || true
+  compose pull postgres zabbix-server zabbix-web edge || true
   if ! compose build api; then
     log "BuildKit не удался; повторная сборка API legacy-сборщиком"
     DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 compose build api \
@@ -554,7 +554,7 @@ wait_for_postgres() {
 
 wait_for_services() {
   local attempts=0
-  local api_id api_status=""
+  local api_id edge_id api_status="" edge_status=""
 
   wait_for_postgres
 
@@ -570,6 +570,64 @@ wait_for_services() {
       sleep 2
     done
     [[ "${api_status:-}" == "healthy" ]] || log "ПРЕДУПРЕЖДЕНИЕ: API ещё не healthy; проверьте: docker compose logs api"
+  fi
+
+  attempts=0
+  edge_id="$(compose ps -q edge)"
+  if [[ -n "${edge_id}" ]]; then
+    while (( attempts < 30 )); do
+      edge_status="$(docker inspect --format '{{.State.Health.Status}}' "${edge_id}" 2>/dev/null || true)"
+      if [[ "${edge_status}" == "healthy" ]]; then
+        log "Edge (HTTP/HTTPS) готов (healthy)"
+        break
+      fi
+      attempts=$((attempts + 1))
+      sleep 2
+    done
+    if [[ "${edge_status:-}" != "healthy" ]]; then
+      log "ПРЕДУПРЕЖДЕНИЕ: edge не healthy; смотрите: docker compose logs edge"
+      compose logs --tail=50 edge || true
+    fi
+  fi
+
+  verify_local_http_access
+}
+
+verify_local_http_access() {
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  local dash_port="${DASHBOARD_PORT:-7081}"
+  local api_port="${API_PORT:-7000}"
+  local dash_tls="${DASHBOARD_TLS_PORT:-7444}"
+  local api_tls="${API_TLS_PORT:-7445}"
+  local code
+
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 -m 8 "http://127.0.0.1:${dash_port}/" 2>/dev/null || echo ERR)"
+  if [[ "${code}" =~ ^[23] ]]; then
+    log "Локальный HTTP dashboard OK (127.0.0.1:${dash_port} → ${code})"
+  else
+    log "ПРЕДУПРЕЖДЕНИЕ: локальный HTTP dashboard недоступен (код ${code})"
+  fi
+
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 -m 8 "http://127.0.0.1:${api_port}/api/v1/health/live" 2>/dev/null || echo ERR)"
+  if [[ "${code}" == "200" ]]; then
+    log "Локальный HTTP API OK (127.0.0.1:${api_port})"
+  else
+    log "ПРЕДУПРЕЖДЕНИЕ: локальный HTTP API недоступен (код ${code})"
+  fi
+
+  code="$(curl -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 -m 8 "https://127.0.0.1:${dash_tls}/" 2>/dev/null || echo ERR)"
+  if [[ "${code}" =~ ^[23] ]]; then
+    log "Локальный HTTPS dashboard OK (127.0.0.1:${dash_tls} → ${code})"
+  else
+    log "ПРЕДУПРЕЖДЕНИЕ: локальный HTTPS dashboard недоступен (код ${code}); проверьте certs/ и docker compose logs edge"
+  fi
+
+  code="$(curl -k -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 -m 8 "https://127.0.0.1:${api_tls}/api/v1/health/live" 2>/dev/null || echo ERR)"
+  if [[ "${code}" == "200" ]]; then
+    log "Локальный HTTPS API OK (127.0.0.1:${api_tls})"
+  else
+    log "ПРЕДУПРЕЖДЕНИЕ: локальный HTTPS API недоступен (код ${code})"
   fi
 }
 
