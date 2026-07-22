@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FAF8F5">
+  <title>CoreSupport Monitor — инфраструктура</title>
+  <meta name="description" content="Панель мониторинга инфраструктуры CoreSupport">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 6 5-3 8 3 5-3v15l-5 3-8-3-5 3Z"/><path d="M8 3v15M16 6v15"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M14 4v6M4 17h2M10 17h10M10 14v6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M14 21h-4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-router" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="8" rx="2"/><path d="M7 14h.01M11 14h.01M16 14h2M8 10 5 5M16 10l3-5M12 10V3"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-ups" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="8" r="2"/><path d="M10 15h4M12 13v4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6 6.7L4 11m16 2-2 4.3A7 7 0 0 1 5.8 15"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  </svg>
+
+  <div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <a class="brand" href="#" aria-label="CoreSupport Monitor">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10"/></svg>
+          </span>
+          <span>CoreSupport<small>Monitor</small></span>
+        </a>
+        <button class="icon-button sidebar-close" id="sidebarClose" aria-label="Закрыть меню"><svg><use href="#i-close"/></svg></button>
+      </div>
+
+      <nav class="side-nav" aria-label="Основная навигация">
+        <p class="nav-caption">Мониторинг</p>
+        <a class="active" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
+        <a href="#devices"><svg><use href="#i-server"/></svg><span>Устройства</span><b id="navDeviceCount">128</b></a>
+        <a href="#problems"><svg><use href="#i-alert"/></svg><span>Проблемы</span><i>7</i></a>
+        <a href="#sites"><svg><use href="#i-map"/></svg><span>Площадки</span></a>
+        <p class="nav-caption second">Управление</p>
+        <button type="button" id="openSettings"><svg><use href="#i-sliders"/></svg><span>Настройки</span></button>
+      </nav>
+
+      <div class="system-card">
+        <div class="system-icon"><svg><use href="#i-activity"/></svg></div>
+        <div><strong>Система работает</strong><span>Zabbix · 20 сек назад</span></div>
+        <span class="live-dot" aria-label="Онлайн"></span>
+      </div>
+      <div class="sidebar-user">
+        <span class="avatar">НА</span>
+        <div><strong>Николай</strong><span>Администратор</span></div>
+        <button class="icon-button" aria-label="Меню профиля"><svg><use href="#i-chevron"/></svg></button>
+      </div>
+    </aside>
+
+    <button class="sidebar-scrim" id="sidebarScrim" aria-label="Закрыть меню"></button>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menuButton" aria-label="Открыть меню"><svg><use href="#i-menu"/></svg></button>
+        <label class="global-search">
+          <svg><use href="#i-search"/></svg>
+          <input id="globalSearch" type="search" placeholder="Найти устройство, IP или площадку" autocomplete="off">
+          <kbd>⌘ K</kbd>
+        </label>
+        <div class="top-actions">
+          <span class="sync-state"><span></span>Данные актуальны</span>
+          <button class="icon-button has-badge" aria-label="Уведомления"><svg><use href="#i-bell"/></svg><i>3</i></button>
+          <button class="button primary" id="addDeviceTop"><svg><use href="#i-plus"/></svg>Добавить устройство</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="page-heading" id="overview">
+          <div>
+            <p class="eyebrow">Инфраструктура · 24/7</p>
+            <h1>Доброе утро, Николай</h1>
+            <p>Вся инфраструктура под контролем. Требуют внимания 7 событий.</p>
+          </div>
+          <div class="heading-actions">
+            <label class="compact-select"><span>Площадка</span><select id="siteFilter"><option value="all">Все площадки</option><option value="office">Главный офис</option><option value="dc">ЦОД Маяковский</option><option value="warehouse">Склад Восточный</option></select></label>
+            <label class="compact-select"><span>Период</span><select><option>Последние 24 часа</option><option>Последние 7 дней</option><option>Последние 30 дней</option></select></label>
+          </div>
+        </section>
+
+        <section class="metric-grid" aria-label="Ключевые показатели">
+          <article class="metric-card indigo">
+            <div class="metric-icon"><svg><use href="#i-server"/></svg></div>
+            <div class="metric-label">Всего устройств</div>
+            <div class="metric-value" id="deviceCount">128</div>
+            <div class="metric-note positive"><svg><use href="#i-check"/></svg>121 доступно</div>
+            <span class="metric-spark"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          </article>
+          <article class="metric-card green">
+            <div class="metric-icon"><svg><use href="#i-activity"/></svg></div>
+            <div class="metric-label">Доступность</div>
+            <div class="metric-value">99,94<span>%</span></div>
+            <div class="metric-note positive">+0,12% за месяц</div>
+            <div class="metric-progress"><span style="width:99.94%"></span></div>
+          </article>
+          <article class="metric-card terra">
+            <div class="metric-icon"><svg><use href="#i-alert"/></svg></div>
+            <div class="metric-label">Активные проблемы</div>
+            <div class="metric-value">7</div>
+            <div class="metric-note warning">2 требуют реакции</div>
+            <div class="severity-dots"><i class="high"></i><i class="high"></i><i></i><i></i><i></i><i></i><i></i></div>
+          </article>
+          <article class="metric-card blue">
+            <div class="metric-icon"><svg><use href="#i-clock"/></svg></div>
+            <div class="metric-label">Среднее время реакции</div>
+            <div class="metric-value">3<span> мин</span></div>
+            <div class="metric-note positive">Цель: менее 5 минут</div>
+            <span class="target-badge">SLA соблюдён</span>
+          </article>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="panel availability-panel">
+            <div class="panel-head">
+              <div><p class="panel-kicker">Динамика</p><h2>Доступность инфраструктуры</h2></div>
+              <div class="legend"><span><i class="current"></i>Текущий период</span><span><i class="previous"></i>Предыдущий</span></div>
+            </div>
+            <div class="chart-summary"><strong>99,94%</strong><span><b>+0,12%</b> к предыдущему периоду</span></div>
+            <div class="line-chart" role="img" aria-label="График доступности за 24 часа">
+              <div class="y-labels"><span>100%</span><span>99,9%</span><span>99,8%</span><span>99,7%</span></div>
+              <svg viewBox="0 0 720 210" preserveAspectRatio="none">
+                <defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3D5A80" stop-opacity=".22"/><stop offset="1" stop-color="#3D5A80" stop-opacity="0"/></linearGradient></defs>
+                <g class="grid-lines"><path d="M0 20H720M0 75H720M0 130H720M0 185H720"/></g>
+                <path class="previous-line" d="M0 61 C60 48 80 70 138 58 S220 55 270 72 S350 56 408 64 S500 43 552 58 S642 52 720 47"/>
+                <path class="area" d="M0 53 C55 44 89 52 138 45 S220 49 270 57 S345 37 408 47 S486 28 552 39 S645 35 720 29 L720 210 L0 210Z"/>
+                <path class="current-line" d="M0 53 C55 44 89 52 138 45 S220 49 270 57 S345 37 408 47 S486 28 552 39 S645 35 720 29"/>
+                <circle cx="552" cy="39" r="5"/><circle cx="552" cy="39" r="11" class="pulse"/>
+              </svg>
+              <div class="x-labels"><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>Сейчас</span></div>
+            </div>
+          </article>
+
+          <article class="panel status-panel">
+            <div class="panel-head"><div><p class="panel-kicker">Состояние</p><h2>Устройства</h2></div><button class="text-button" data-scroll="#devices">Все устройства <svg><use href="#i-chevron"/></svg></button></div>
+            <div class="donut-wrap">
+              <div class="donut"><div><strong>128</strong><span>всего</span></div></div>
+              <div class="status-list">
+                <div><span><i class="ok"></i>Доступно</span><b>121</b><small>94,5%</small></div>
+                <div><span><i class="warn"></i>С предупреждением</span><b>5</b><small>3,9%</small></div>
+                <div><span><i class="down"></i>Недоступно</span><b>2</b><small>1,6%</small></div>
+              </div>
+            </div>
+            <div class="type-row"><span><svg><use href="#i-server"/></svg>Серверы <b>24</b></span><span><svg><use href="#i-router"/></svg>Сеть <b>46</b></span><span><svg><use href="#i-monitor"/></svg>ПК <b>52</b></span><span><svg><use href="#i-ups"/></svg>ИБП <b>6</b></span></div>
+          </article>
+        </section>
+
+        <section class="panel problems-panel" id="problems">
+          <div class="panel-head">
+            <div><p class="panel-kicker">События</p><h2>Требуют внимания</h2></div>
+            <div class="panel-tools"><span class="updated"><svg><use href="#i-refresh"/></svg>20 сек назад</span><button class="text-button">Все проблемы <svg><use href="#i-chevron"/></svg></button></div>
+          </div>
+          <div class="table-scroll">
+            <table class="problems-table">
+              <thead><tr><th>Важность</th><th>Проблема</th><th>Устройство</th><th>Площадка</th><th>Длительность</th><th><span class="sr-only">Действия</span></th></tr></thead>
+              <tbody>
+                <tr data-site="dc"><td><span class="severity disaster">Критическая</span></td><td><strong>RAID-массив в деградированном состоянии</strong><small>Свободен только один резервный диск</small></td><td><span class="device-cell"><i class="device-icon server"><svg><use href="#i-server"/></svg></i><span>srv-db-01<small>10.20.1.12</small></span></span></td><td>ЦОД Маяковский</td><td>18 мин</td><td><button class="row-action acknowledge">Принять</button></td></tr>
+                <tr data-site="office"><td><span class="severity high">Высокая</span></td><td><strong>Высокая загрузка канала WAN</strong><small>Использование выше 92% в течение 15 минут</small></td><td><span class="device-cell"><i class="device-icon router"><svg><use href="#i-router"/></svg></i><span>rt-office-01<small>10.10.0.1</small></span></span></td><td>Главный офис</td><td>26 мин</td><td><button class="row-action acknowledge">Принять</button></td></tr>
+                <tr data-site="warehouse"><td><span class="severity average">Средняя</span></td><td><strong>Низкий заряд батареи ИБП</strong><small>Оставшееся время работы: 14 минут</small></td><td><span class="device-cell"><i class="device-icon ups"><svg><use href="#i-ups"/></svg></i><span>ups-stock-02<small>10.30.2.16</small></span></span></td><td>Склад Восточный</td><td>1 ч 12 мин</td><td><button class="row-action acknowledge">Принять</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="sites" class="section-block">
+          <div class="section-head"><div><p class="panel-kicker">География</p><h2>Площадки</h2></div><button class="button secondary" id="addSite"><svg><use href="#i-plus"/></svg>Добавить площадку</button></div>
+          <div class="site-grid">
+            <article class="site-card" data-site-card="office"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health ok">В норме</span></div><h3>Главный офис</h3><p>Пенза · proxy-office</p><div class="site-stats"><span><b>68</b> устройств</span><span><b>1</b> проблема</span></div><div class="site-bar"><span style="width:98%"></span></div></article>
+            <article class="site-card" data-site-card="dc"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health attention">Требует внимания</span></div><h3>ЦОД Маяковский</h3><p>Москва · proxy-dc-msk</p><div class="site-stats"><span><b>42</b> устройства</span><span><b>4</b> проблемы</span></div><div class="site-bar attention"><span style="width:91%"></span></div></article>
+            <article class="site-card" data-site-card="warehouse"><div class="site-top"><span class="site-icon"><svg><use href="#i-map"/></svg></span><span class="site-health ok">В норме</span></div><h3>Склад Восточный</h3><p>Пенза · proxy-stock</p><div class="site-stats"><span><b>18</b> устройств</span><span><b>2</b> проблемы</span></div><div class="site-bar"><span style="width:96%"></span></div></article>
+          </div>
+        </section>
+
+        <section class="panel devices-panel" id="devices">
+          <div class="panel-head"><div><p class="panel-kicker">Каталог</p><h2>Последние устройства</h2></div><button class="button primary" id="addDeviceInline"><svg><use href="#i-plus"/></svg>Добавить устройство</button></div>
+          <div class="device-list" id="deviceList">
+            <div class="device-list-head"><span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Последние данные</span></div>
+            <article><span class="device-cell"><i class="device-icon server"><svg><use href="#i-server"/></svg></i><span>srv-app-02<small>10.20.1.22</small></span></span><span>Linux-сервер</span><span>ЦОД Маяковский</span><span><i class="state-dot ok"></i>Доступно</span><span>12 сек назад</span></article>
+            <article><span class="device-cell"><i class="device-icon router"><svg><use href="#i-router"/></svg></i><span>sw-office-03<small>10.10.1.13</small></span></span><span>Коммутатор</span><span>Главный офис</span><span><i class="state-dot ok"></i>Доступно</span><span>18 сек назад</span></article>
+            <article><span class="device-cell"><i class="device-icon ups"><svg><use href="#i-ups"/></svg></i><span>ups-stock-02<small>10.30.2.16</small></span></span><span>ИБП</span><span>Склад Восточный</span><span><i class="state-dot warn"></i>Предупреждение</span><span>28 сек назад</span></article>
+          </div>
+        </section>
+
+        <footer class="app-footer"><span>CoreSupport Monitor · интерфейсный прототип</span><span>Данные демонстрационные · API ещё не подключён</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <dialog class="modal wizard-modal" id="deviceWizard" aria-labelledby="wizardTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Новое устройство</p><h2 id="wizardTitle">Добавление в мониторинг</h2></div><button class="icon-button modal-close" data-close="deviceWizard" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <div class="wizard-layout">
+        <aside class="wizard-steps" aria-label="Шаги добавления">
+          <button class="active" data-step-nav="1"><i>1</i><span><b>Основное</b><small>Имя и площадка</small></span></button>
+          <button data-step-nav="2"><i>2</i><span><b>Подключение</b><small>Протокол и профиль</small></span></button>
+          <button data-step-nav="3"><i>3</i><span><b>Проверка</b><small>Доступность и модель</small></span></button>
+          <button data-step-nav="4"><i>4</i><span><b>Готово</b><small>Проверка настроек</small></span></button>
+        </aside>
+        <form id="deviceForm" novalidate>
+          <div class="wizard-content">
+            <section class="wizard-page active" data-step="1">
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-server"/></svg></span><div><h3>Расскажите об устройстве</h3><p>Достаточно имени и адреса — остальные параметры предложим автоматически.</p></div></div>
+              <div class="form-grid two">
+                <label class="field"><span>Понятное имя <b>*</b></span><input name="name" id="deviceName" placeholder="Например, Коммутатор серверной" required><small>Будет видно операторам на dashboard</small></label>
+                <label class="field"><span>IP-адрес или FQDN <b>*</b></span><input name="address" id="deviceAddress" placeholder="10.20.1.15" required inputmode="url"><small>Адрес в management-сети</small></label>
+                <label class="field"><span>Площадка <b>*</b></span><select name="site" id="deviceSite" required><option value="">Выберите площадку</option><option>Главный офис</option><option>ЦОД Маяковский</option><option>Склад Восточный</option></select></label>
+                <label class="field"><span>Тип устройства <b>*</b></span><select name="type" id="deviceType" required><option value="">Определить автоматически</option><option value="server">Сервер</option><option value="router">Сетевое оборудование</option><option value="computer">Рабочая станция</option><option value="ups">ИБП</option></select></label>
+              </div>
+              <div class="inline-note"><svg><use href="#i-shield"/></svg><div><strong>Безопасная проверка</strong><span>Система проверит только указанный адрес с назначенного Zabbix proxy.</span></div></div>
+            </section>
+
+            <section class="wizard-page" data-step="2">
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-sliders"/></svg></span><div><h3>Как подключаться?</h3><p>Выберите способ. Для сетевого оборудования и ИБП обычно подходит SNMPv3.</p></div></div>
+              <fieldset class="protocols"><legend class="sr-only">Протокол подключения</legend>
+                <label><input type="radio" name="protocol" value="SNMPv3" checked><span class="protocol-card"><i><svg><use href="#i-router"/></svg></i><b>SNMPv3</b><small>Рекомендуется для сети и ИБП</small><em>Безопасно</em></span></label>
+                <label><input type="radio" name="protocol" value="Zabbix agent2"><span class="protocol-card"><i><svg><use href="#i-monitor"/></svg></i><b>Zabbix agent2</b><small>Linux и Windows</small></span></label>
+                <label><input type="radio" name="protocol" value="ICMP"><span class="protocol-card"><i><svg><use href="#i-activity"/></svg></i><b>Только ICMP</b><small>Базовая доступность</small></span></label>
+              </fieldset>
+              <div class="form-grid two connection-fields">
+                <label class="field"><span>Профиль подключения</span><select id="credentialProfile"><option>SNMP Core · authPriv</option><option>SNMP UPS · authPriv</option><option>Agent PSK · office</option></select><small>Секреты хранятся зашифрованно</small></label>
+                <label class="field"><span>Zabbix proxy</span><select id="proxy"><option>Выбрать по площадке</option><option>proxy-office</option><option>proxy-dc-msk</option><option>proxy-stock</option></select><small>Автоматически доступный для площадки</small></label>
+              </div>
+              <button type="button" class="text-button add-profile" data-toast="Создание профиля будет доступно администратору"><svg><use href="#i-plus"/></svg>Создать новый профиль</button>
+            </section>
+
+            <section class="wizard-page" data-step="3">
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-activity"/></svg></span><div><h3>Проверяем подключение</h3><p>Это займёт несколько секунд. Устройство пока не добавляется в Zabbix.</p></div></div>
+              <div class="probe-card" id="probeCard">
+                <div class="probe-animation"><span></span><span></span><span></span><i><svg><use href="#i-router"/></svg></i></div>
+                <div class="probe-title"><strong id="probeTitle">Готовы начать проверку</strong><span id="probeSubtitle">Проверим сеть, протокол, авторизацию и определим модель</span></div>
+                <button type="button" class="button secondary" id="runProbe"><svg><use href="#i-refresh"/></svg>Проверить подключение</button>
+              </div>
+              <div class="check-list" id="checkList">
+                <div data-check="network"><i><svg><use href="#i-clock"/></svg></i><span><b>Сеть и ICMP</b><small>Ожидает проверки</small></span><em>—</em></div>
+                <div data-check="protocol"><i><svg><use href="#i-clock"/></svg></i><span><b>Протокол и порт</b><small>Ожидает проверки</small></span><em>—</em></div>
+                <div data-check="auth"><i><svg><use href="#i-clock"/></svg></i><span><b>Авторизация</b><small>Ожидает проверки</small></span><em>—</em></div>
+                <div data-check="identity"><i><svg><use href="#i-clock"/></svg></i><span><b>Определение устройства</b><small>Ожидает проверки</small></span><em>—</em></div>
+              </div>
+            </section>
+
+            <section class="wizard-page" data-step="4">
+              <div class="step-heading"><span class="step-icon success"><svg><use href="#i-check"/></svg></span><div><h3>Всё готово к добавлению</h3><p>Мы подобрали настройки. Проверьте их перед применением.</p></div></div>
+              <div class="preview-device">
+                <span class="preview-icon"><svg><use href="#i-router"/></svg></span>
+                <div><p>Устройство</p><h4 id="previewName">Новое устройство</h4><span id="previewAddress">—</span></div>
+                <span class="preview-status"><i></i>Подключение проверено</span>
+              </div>
+              <dl class="preview-list">
+                <div><dt>Площадка</dt><dd id="previewSite">—</dd></div>
+                <div><dt>Способ подключения</dt><dd id="previewProtocol">SNMPv3</dd></div>
+                <div><dt>Найдена модель</dt><dd>APC Smart-UPS SRT 3000</dd></div>
+                <div><dt>Zabbix proxy</dt><dd id="previewProxy">По площадке</dd></div>
+                <div><dt>Шаблон мониторинга</dt><dd><span class="template-chip">UPS APC by SNMP</span></dd></div>
+                <div><dt>Будем контролировать</dt><dd>Доступность, заряд, нагрузку, runtime, входное напряжение и alarms</dd></div>
+              </dl>
+              <label class="confirm-check"><input type="checkbox" id="startMonitoring" checked><span><svg><use href="#i-check"/></svg></span><span><b>Сразу начать мониторинг</b><small>Первые данные появятся в течение 2–5 минут</small></span></label>
+            </section>
+          </div>
+          <footer class="wizard-footer"><span class="step-counter">Шаг <b id="currentStepLabel">1</b> из 4</span><div><button type="button" class="button ghost" id="wizardBack" hidden>Назад</button><button type="button" class="button primary" id="wizardNext">Продолжить<svg><use href="#i-chevron"/></svg></button></div></footer>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="modal settings-modal" id="settingsDialog" aria-labelledby="settingsTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Управление</p><h2 id="settingsTitle">Настройки мониторинга</h2><p>Подключения, площадки и правила в одном месте.</p></div><button class="icon-button modal-close" data-close="settingsDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <div class="settings-grid">
+        <button data-toast="Соединение с Zabbix API успешно"><i class="setting-icon indigo"><svg><use href="#i-activity"/></svg></i><span><b>Подключение к Zabbix</b><small>API доступен · версия 7.0 · 18 мс</small></span><em class="setting-ok">Подключено</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Открыт раздел площадок"><i class="setting-icon green"><svg><use href="#i-map"/></svg></i><span><b>Площадки и proxy</b><small>3 площадки · 3 активных proxy</small></span><em>3</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Открыты защищённые профили"><i class="setting-icon terra"><svg><use href="#i-shield"/></svg></i><span><b>Профили подключения</b><small>SNMP, Agent PSK и IPMI</small></span><em>6</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Открыты политики мониторинга"><i class="setting-icon blue"><svg><use href="#i-sliders"/></svg></i><span><b>Политики мониторинга</b><small>Автовыбор шаблонов и интервалов</small></span><em>8</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Раздел пользователей будет подключён к RBAC"><i class="setting-icon indigo"><svg><use href="#i-eye"/></svg></i><span><b>Пользователи и роли</b><small>Администраторы, операторы, наблюдатели</small></span><em>12</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button data-toast="Резервная копия актуальна"><i class="setting-icon green"><svg><use href="#i-check"/></svg></i><span><b>Состояние системы</b><small>Backup 6 ч назад · диск свободен на 72%</small></span><em class="setting-ok">В норме</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+      </div>
+      <footer class="settings-footer"><span><svg><use href="#i-shield"/></svg>Секреты никогда не отображаются после сохранения</span><button class="button primary" data-close="settingsDialog">Готово</button></footer>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"><span><svg><use href="#i-check"/></svg></span><p></p></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
