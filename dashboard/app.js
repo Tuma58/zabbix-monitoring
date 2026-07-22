@@ -5,7 +5,7 @@
   const TOKEN_KEY = 'netmon_access_token';
   const REFRESH_KEY = 'netmon_refresh_token';
   // Local bootstrap defaults for Stage 1 preview; replace with login UI later.
-  const DEMO_EMAIL = 'admin@netmon.local';
+  const DEMO_EMAIL = 'admin@example.com';
   const DEMO_PASSWORD = 'ChangeMeNow!';
 
   const $ = (selector, root = document) => root.querySelector(selector);

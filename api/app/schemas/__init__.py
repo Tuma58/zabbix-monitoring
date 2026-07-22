@@ -1,16 +1,31 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+def _require_email(value: str) -> str:
+    normalized = value.strip().lower()
+    if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+        raise ValueError("Invalid email address")
+    local, _, domain = normalized.partition("@")
+    if not local or not domain or " " in normalized:
+        raise ValueError("Invalid email address")
+    return normalized
+
+
 class LoginRequest(APIModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return _require_email(value)
 
 
 class TokenResponse(APIModel):
@@ -26,9 +41,14 @@ class RefreshRequest(APIModel):
 
 class MeResponse(APIModel):
     id: str
-    email: EmailStr
+    email: str
     roles: list[str]
     permissions: list[str]
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return _require_email(value)
 
 
 class SiteCreate(APIModel):

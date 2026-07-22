@@ -43,13 +43,15 @@ services:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 10051 || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 60s
+      retries: 30
+      start_period: 180s
     cap_add:
       - NET_RAW
+    # Stay only on backend: attaching an extra network breaks connectivity to an
+    # `internal:` Compose network on multi-homed containers. Agents/proxies use
+    # the published trapper port on the host instead.
     networks:
       - backend
-      - monitoring
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 30s
@@ -68,15 +70,15 @@ services:
       postgres:
         condition: service_healthy
       zabbix-server:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "${ZABBIX_WEB_BIND:-127.0.0.1}:${ZABBIX_WEB_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/ >/dev/null || wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 45s
+      retries: 20
+      start_period: 90s
     networks:
       - backend
     security_opt:
@@ -91,7 +93,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-zabbix}:${POSTGRES_PASSWORD}@postgres:5432/${PORTAL_DB:-netmon}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:?SECRETS_MASTER_KEY is required}
-      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@netmon.local}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-ChangeMeNow!}
       ZABBIX_API_URL: ${ZABBIX_API_URL:-http://zabbix-web:8080/api_jsonrpc.php}
       ZABBIX_API_USER: ${ZABBIX_API_USER:-}
@@ -122,7 +124,7 @@ services:
       - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
       interval: 15s
@@ -139,7 +141,9 @@ volumes:
     name: netmon-postgres-data
 
 networks:
+  # Not marked internal: published loopback binds provide host isolation, and
+  # `internal: true` breaks container DNS/TCP on some Docker+nftables hosts.
   backend:
-    internal: true
+    name: netmon-backend
   monitoring:
     name: netmon-monitoring

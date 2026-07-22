@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         description="Master key for credential envelope encryption",
     )
 
-    bootstrap_admin_email: str = "admin@netmon.local"
+    bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "ChangeMeNow!"
 
     zabbix_api_url: str = "http://zabbix-web:8080/api_jsonrpc.php"

@@ -36,37 +36,84 @@ check_platform() {
 }
 
 install_docker() {
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    log "Installing Docker Engine from the official Docker repository"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y ca-certificates curl openssl iptables
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    local architecture
+    architecture="$(dpkg --print-architecture)"
+    printf '%s\n' \
+      'Types: deb' \
+      'URIs: https://download.docker.com/linux/ubuntu' \
+      "Suites: ${UBUNTU_CODENAME:-${VERSION_CODENAME}}" \
+      'Components: stable' \
+      "Architectures: ${architecture}" \
+      'Signed-By: /etc/apt/keyrings/docker.asc' \
+      > /etc/apt/sources.list.d/docker.sources
+
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io \
+      docker-buildx-plugin docker-compose-plugin
+  else
     log "Docker Engine and Compose plugin are already installed"
+  fi
+
+  prefer_iptables_legacy
+  ensure_docker_daemon
+}
+
+prefer_iptables_legacy() {
+  # Mixed nft/legacy iptables breaks Docker bridge forwarding on some hosts.
+  if [[ -x /usr/sbin/iptables-legacy ]]; then
+    update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 || true
+  fi
+  if [[ -x /usr/sbin/ip6tables-legacy ]]; then
+    update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1 || true
+  fi
+}
+
+ensure_docker_daemon() {
+  if docker info >/dev/null 2>&1; then
     return
   fi
 
-  log "Installing Docker Engine from the official Docker repository"
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update
-  apt-get install -y ca-certificates curl openssl
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    -o /etc/apt/keyrings/docker.asc
-  chmod a+r /etc/apt/keyrings/docker.asc
+  log "Starting Docker daemon"
+  if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    systemctl enable --now docker || true
+  fi
 
-  # shellcheck disable=SC1091
-  source /etc/os-release
-  local architecture
-  architecture="$(dpkg --print-architecture)"
-  printf '%s\n' \
-    'Types: deb' \
-    'URIs: https://download.docker.com/linux/ubuntu' \
-    "Suites: ${UBUNTU_CODENAME:-${VERSION_CODENAME}}" \
-    'Components: stable' \
-    "Architectures: ${architecture}" \
-    'Signed-By: /etc/apt/keyrings/docker.asc' \
-    > /etc/apt/sources.list.d/docker.sources
+  if ! docker info >/dev/null 2>&1; then
+    # Environments without systemd (some CI/cloud agents): start dockerd directly.
+    mkdir -p /var/run /var/log
+    # Nested overlay filesystems cannot use the overlay storage driver.
+    if [[ ! -f /etc/docker/daemon.json ]] && findmnt -no FSTYPE /var/lib 2>/dev/null | grep -qi overlay; then
+      mkdir -p /etc/docker
+      printf '{\n  "storage-driver": "vfs"\n}\n' > /etc/docker/daemon.json
+      log "Detected nested overlay FS; configured Docker storage-driver=vfs"
+    fi
+    if ! pgrep -x dockerd >/dev/null 2>&1; then
+      dockerd --host=unix:///var/run/docker.sock >/var/log/dockerd.log 2>&1 &
+    fi
+  fi
 
-  apt-get update
-  apt-get install -y docker-ce docker-ce-cli containerd.io \
-    docker-buildx-plugin docker-compose-plugin
-  systemctl enable --now docker
+  local attempts=0
+  while (( attempts < 30 )); do
+    if docker info >/dev/null 2>&1; then
+      log "Docker daemon is ready"
+      return
+    fi
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+  fail "Docker daemon did not become ready; see /var/log/dockerd.log"
 }
 
 random_secret() {
@@ -100,7 +147,7 @@ create_environment() {
     printf 'POSTGRES_PASSWORD=%s\n' "${db_password}"
     printf 'JWT_SECRET=%s\n' "${jwt_secret}"
     printf 'SECRETS_MASTER_KEY=%s\n' "${secrets_key}"
-    printf 'BOOTSTRAP_ADMIN_EMAIL=%s\n' "${BOOTSTRAP_ADMIN_EMAIL:-admin@netmon.local}"
+    printf 'BOOTSTRAP_ADMIN_EMAIL=%s\n' "${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
     printf 'BOOTSTRAP_ADMIN_PASSWORD=%s\n' "${BOOTSTRAP_ADMIN_PASSWORD:-ChangeMeNow!}"
     printf 'ZABBIX_ENABLED=%s\n' "${ZABBIX_ENABLED:-false}"
     printf 'ZABBIX_API_URL=%s\n' "${ZABBIX_API_URL:-http://zabbix-web:8080/api_jsonrpc.php}"
@@ -152,8 +199,13 @@ start_stack() {
   compose config --quiet
 
   log "Building API image and starting the monitoring stack"
-  compose pull || true
-  compose build api
+  # Pull only published images; netmon-api is built locally.
+  compose pull postgres zabbix-server zabbix-web dashboard || true
+  if ! compose build api; then
+    log "BuildKit failed; retrying API image build with legacy builder"
+    DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 compose build api \
+      || fail "Failed to build API image"
+  fi
   compose up -d postgres
   wait_for_postgres
   ensure_portal_database
@@ -222,7 +274,7 @@ print_next_steps() {
   else
     log "API docs: http://SERVER_IP:${API_PORT:-8000}/api/v1/docs"
   fi
-  log "Portal login: ${BOOTSTRAP_ADMIN_EMAIL:-admin@netmon.local} / (see BOOTSTRAP_ADMIN_PASSWORD in .env)"
+  log "Portal login: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com} / (see BOOTSTRAP_ADMIN_PASSWORD in .env)"
   log "Initial Zabbix login: Admin / zabbix. Change it immediately."
   log "Trapper port ${ZABBIX_SERVER_PORT:-10051} is bound to ${ZABBIX_SERVER_BIND:-127.0.0.1}; open it only for agent/proxy networks."
   log "Next: read ${SCRIPT_DIR}/docs/DEPLOYMENT.md"

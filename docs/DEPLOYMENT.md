@@ -29,23 +29,31 @@ PostgreSQL, Zabbix server, Zabbix web, custom API (`/api/v1`) и dashboard.
 - от VPS/proxy к устройствам: ICMP, `10050/TCP`, `161/UDP`, при необходимости
   `623/UDP` IPMI и vendor API ports.
 
-Docker может обходить часть привычных UFW-правил при публикации портов. Правила
-ограничения `10051/TCP` следует задавать в `DOCKER-USER` chain либо на внешнем
-firewall/security group.
+## Сеть Compose
+
+Сервисы общаются в сети `netmon-backend`. Порты UI/API/trapper публикуются на
+`127.0.0.1` (настраивается через `*_BIND`). Agents и proxies подключаются к
+trapper через опубликованный порт хоста, а не через отдельную internal-сеть —
+так надёжнее на Docker с nftables и не ломает связь server↔PostgreSQL.
 
 ## Однокомандная установка
 
-После публикации этого проекта в Git замените `REPOSITORY_URL` на реальный URL.
-Для чистого VPS вся операция укладывается в одну shell-команду:
+Для чистого Ubuntu 22.04/24.04 VPS:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y git && sudo git clone REPOSITORY_URL /opt/netmon && sudo /opt/netmon/install.sh
+sudo apt-get update && sudo apt-get install -y git && sudo git clone https://github.com/Tuma58/zabbix-monitoring.git /opt/netmon && sudo /opt/netmon/install.sh
 ```
 
 Если репозиторий уже загружен в `/opt/netmon`:
 
 ```bash
 sudo /opt/netmon/install.sh
+```
+
+Для установки конкретной ветки (например PR):
+
+```bash
+sudo git clone -b cursor/stage1-platform-foundation-6c05 https://github.com/Tuma58/zabbix-monitoring.git /opt/netmon && sudo /opt/netmon/install.sh
 ```
 
 Скрипт идемпотентен для повторного запуска: существующий `.env` и пароль БД не
