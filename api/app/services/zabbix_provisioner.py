@@ -75,13 +75,16 @@ def _build_interfaces(
     if spec.interface == "snmp":
         details: dict[str, Any] = {"version": 3, "bulk": 1, "securityname": secrets.get("username", "")}
         security_level = secrets.get("security_level", "authPriv")
+        level_map = {"noAuthNoPriv": 0, "authNoPriv": 1, "authPriv": 2}
+        details["securitylevel"] = level_map.get(security_level, 2)
+        auth_map = {"MD5": 0, "SHA1": 1, "SHA224": 2, "SHA256": 3, "SHA384": 4, "SHA512": 5}
+        priv_map = {"DES": 0, "AES128": 1, "AES192": 2, "AES256": 3, "AES192C": 4, "AES256C": 5}
         if security_level in {"authNoPriv", "authPriv"}:
-            details["securitylevel"] = 2 if security_level == "authNoPriv" else 3
             details["authpassphrase"] = secrets.get("auth_passphrase", "")
-            details["authprotocol"] = 3 if secrets.get("auth_protocol") == "SHA256" else 1
+            details["authprotocol"] = auth_map.get(secrets.get("auth_protocol", "SHA256"), 3)
         if security_level == "authPriv":
             details["privpassphrase"] = secrets.get("priv_passphrase", "")
-            details["privprotocol"] = 2 if secrets.get("priv_protocol") == "AES128" else 1
+            details["privprotocol"] = priv_map.get(secrets.get("priv_protocol", "AES128"), 1)
         return [
             {
                 "type": 2,
