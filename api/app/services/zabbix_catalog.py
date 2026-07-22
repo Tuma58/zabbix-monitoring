@@ -53,7 +53,7 @@ def _snmp_spec(device_type: str, subtype: str, template: str, label: str) -> Mon
         key=f"{device_type}:{subtype}:SNMPv3",
         name=f"Auto · SNMP · {label}",
         profile_type="snmp_v3",
-        zabbix_templates=(template, "Network Generic Device by SNMP"),
+        zabbix_templates=(template,),
         interface="snmp",
         public={"device_type": device_type, "subtype": subtype, "protocol": "SNMPv3"},
     )

@@ -17,3 +17,4 @@ def test_snmp_authpriv_uses_securitylevel_two():
     assert details["securitylevel"] == 2
     assert details["authprotocol"] == 3
     assert details["privprotocol"] == 1
+    assert len(spec.zabbix_templates) == 1
