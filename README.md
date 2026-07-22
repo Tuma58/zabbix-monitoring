@@ -24,10 +24,24 @@
 
 ## Быстрый запуск базового контура
 
-На чистом VPS после размещения репозитория в `/opt/netmon`:
+На чистом VPS:
 
 ```bash
+sudo apt-get update && sudo apt-get install -y git && \
+sudo mkdir -p /opt/netmon && \
+if [ -d /opt/netmon/.git ]; then
+  sudo git -C /opt/netmon pull --ff-only
+else
+  sudo rm -rf /opt/netmon &&
+  sudo git clone https://github.com/Tuma58/zabbix-monitoring.git /opt/netmon
+fi && \
 sudo /opt/netmon/install.sh
+```
+
+Если репозиторий уже лежит в `/opt/netmon`:
+
+```bash
+cd /opt/netmon && sudo git pull --ff-only && sudo ./install.sh
 ```
 
 По умолчанию Zabbix UI, API и dashboard слушают только `127.0.0.1`. Для доступа
