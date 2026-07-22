@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.deps import AppSettings, DbSession, Gateway, OperatorUser, Secrets, ViewerUser
 from app.errors import AppError, not_found
 from app.models import Device, DeviceStatus, Operation, OperationState, Site
-from app.schemas import DeviceCreate, DeviceOut, OperationOut, ProbeRequest
+from app.schemas import DeviceCreate, DeviceOut, DeviceUpdate, OperationOut, ProbeRequest
 from app.services.audit import record_audit
 from app.services.portal_settings import get_probe_networks
 from app.services.ssrf import assert_probe_target_allowed
@@ -185,3 +185,105 @@ def get_device(device_id: str, _: ViewerUser, db: DbSession) -> DeviceOut:
     if device is None:
         raise not_found("Device not found")
     return _device_out(device)
+
+
+@router.patch("/{device_id}", response_model=DeviceOut)
+def update_device(
+    device_id: str,
+    payload: DeviceUpdate,
+    request: Request,
+    user: OperatorUser,
+    db: DbSession,
+) -> DeviceOut:
+    device = db.get(Device, device_id)
+    if device is None:
+        raise not_found("Device not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "site_id" in data and data["site_id"]:
+        site = db.get(Site, data["site_id"])
+        if site is None:
+            raise not_found("Site not found")
+        device.site_id = data["site_id"]
+    if "name" in data and data["name"] and data["name"] != device.name:
+        duplicate = db.scalar(select(Device).where(Device.name == data["name"], Device.id != device.id))
+        if duplicate is not None:
+            raise AppError(
+                status_code=409,
+                code="DEVICE_ALREADY_EXISTS",
+                message="Device name already registered",
+            )
+        device.name = data["name"]
+    if "address" in data and data["address"] and data["address"] != device.address:
+        duplicate = db.scalar(
+            select(Device).where(Device.address == data["address"], Device.id != device.id)
+        )
+        if duplicate is not None:
+            raise AppError(
+                status_code=409,
+                code="DEVICE_ALREADY_EXISTS",
+                message="Device address already registered",
+            )
+        device.address = data["address"]
+    for field in (
+        "device_type",
+        "protocol",
+        "monitoring_subtype",
+        "credential_profile_id",
+        "vendor",
+        "model",
+        "status",
+    ):
+        if field in data:
+            setattr(device, field, data[field])
+    device.version = int(device.version or 1) + 1
+    record_audit(
+        db,
+        actor_id=user.id,
+        action="device.update",
+        target_type="device",
+        target_id=device.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip=request.client.host if request.client else None,
+        diff=data,
+    )
+    db.commit()
+    db.refresh(device)
+    return _device_out(device)
+
+
+@router.delete("/{device_id}", status_code=204)
+async def delete_device(
+    device_id: str,
+    request: Request,
+    user: OperatorUser,
+    db: DbSession,
+    gateway: Gateway,
+) -> None:
+    device = db.get(Device, device_id)
+    if device is None:
+        raise not_found("Device not found")
+    zabbix_deleted = False
+    if device.zabbix_host_id and gateway.enabled:
+        try:
+            await gateway.call("host.delete", [device.zabbix_host_id])
+            zabbix_deleted = True
+        except AppError:
+            # Portal inventory remains source of truth; Zabbix cleanup is best-effort.
+            zabbix_deleted = False
+    record_audit(
+        db,
+        actor_id=user.id,
+        action="device.delete",
+        target_type="device",
+        target_id=device.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip=request.client.host if request.client else None,
+        diff={
+            "name": device.name,
+            "address": device.address,
+            "zabbix_host_id": device.zabbix_host_id,
+            "zabbix_deleted": zabbix_deleted,
+        },
+    )
+    db.delete(device)
+    db.commit()

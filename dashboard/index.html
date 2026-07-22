@@ -188,7 +188,7 @@
         <section class="panel devices-panel" id="devices">
           <div class="panel-head"><div><p class="panel-kicker">Каталог</p><h2>Последние устройства</h2></div><button class="button primary" id="addDeviceInline"><svg><use href="#i-plus"/></svg>Добавить устройство</button></div>
           <div class="device-list" id="deviceList">
-            <div class="device-list-head"><span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Последние данные</span></div>
+            <div class="device-list-head"><span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Действия</span></div>
             <article class="empty-state"><span>Устройств пока нет. Нажмите «Добавить устройство».</span></article>
           </div>
         </section>
@@ -307,6 +307,7 @@
       <div class="settings-grid" id="settingsHome">
         <button type="button" data-toast="Соединение с Zabbix API"><i class="setting-icon indigo"><svg><use href="#i-activity"/></svg></i><span><b>Подключение к Zabbix</b><small id="settingsZabbixMeta">Проверка…</small></span><em class="setting-ok" id="settingsZabbixStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
         <button type="button" data-nav-section="sites"><i class="setting-icon green"><svg><use href="#i-map"/></svg></i><span><b>Площадки и proxy</b><small id="settingsSitesMeta">0 площадок</small></span><em id="settingsSitesCount">0</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button type="button" data-nav-section="devices"><i class="setting-icon indigo"><svg><use href="#i-server"/></svg></i><span><b>Устройства</b><small id="settingsDevicesMeta">каталог мониторинга</small></span><em id="settingsDevicesCount">0</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
         <button type="button" id="openProbeNetworks"><i class="setting-icon blue"><svg><use href="#i-shield"/></svg></i><span><b>Разрешённые сети</b><small id="settingsNetworksMeta">для проверки устройств</small></span><em id="settingsNetworksCount">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
         <button type="button" data-toast="Профили создаются автоматически при добавлении устройства"><i class="setting-icon terra"><svg><use href="#i-shield"/></svg></i><span><b>Профили подключения</b><small>SNMP, Agent PSK и IPMI</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
         <button type="button" data-toast="Политики: каталог шаблонов Zabbix по типу устройства"><i class="setting-icon blue"><svg><use href="#i-sliders"/></svg></i><span><b>Политики мониторинга</b><small>Автовыбор шаблонов и интервалов</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
@@ -334,6 +335,37 @@
         </form>
       </section>
       <footer class="settings-footer"><span><svg><use href="#i-shield"/></svg>Секреты никогда не отображаются после сохранения</span><button class="button primary" data-close="settingsDialog">Готово</button></footer>
+    </div>
+  </dialog>
+
+  <dialog class="modal settings-modal" id="siteDialog" aria-labelledby="siteDialogTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Площадка</p><h2 id="siteDialogTitle">Площадка</h2><p>Имя, часовой пояс и proxy.</p></div><button class="icon-button modal-close" data-close="siteDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <form id="siteForm" class="manage-form">
+        <input type="hidden" id="siteEditId">
+        <label class="field"><span>Название <b>*</b></span><input id="siteEditName" required maxlength="128" placeholder="Основная"></label>
+        <label class="field"><span>Часовой пояс</span><input id="siteEditTimezone" value="Europe/Moscow" placeholder="Europe/Moscow"></label>
+        <label class="field"><span>Zabbix proxy ID</span><input id="siteEditProxy" placeholder="пусто = сервер по умолчанию"></label>
+      </form>
+      <footer class="settings-footer"><span id="siteDialogHint">Площадка используется для группировки устройств</span><div class="manage-footer-actions"><button type="button" class="button ghost" data-close="siteDialog">Отмена</button><button class="button primary" type="submit" form="siteForm" id="siteFormSave">Сохранить</button></div></footer>
+    </div>
+  </dialog>
+
+  <dialog class="modal settings-modal" id="deviceEditDialog" aria-labelledby="deviceEditTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Устройство</p><h2 id="deviceEditTitle">Редактирование</h2><p>Изменение карточки в инвентаре портала.</p></div><button class="icon-button modal-close" data-close="deviceEditDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <form id="deviceEditForm" class="manage-form">
+        <input type="hidden" id="deviceEditId">
+        <div class="form-grid two">
+          <label class="field"><span>Имя <b>*</b></span><input id="deviceEditName" required maxlength="255"></label>
+          <label class="field"><span>Адрес <b>*</b></span><input id="deviceEditAddress" required maxlength="255"></label>
+          <label class="field"><span>Площадка <b>*</b></span><select id="deviceEditSite" required></select></label>
+          <label class="field"><span>Тип</span><select id="deviceEditType"><option value="server">Сервер</option><option value="router">Сетевое оборудование</option><option value="computer">Рабочая станция</option><option value="ups">ИБП</option></select></label>
+          <label class="field"><span>Протокол</span><select id="deviceEditProtocol"><option value="SNMPv3">SNMPv3</option><option value="Zabbix agent2">Zabbix agent2</option><option value="ICMP">ICMP</option></select></label>
+          <label class="field"><span>Статус</span><select id="deviceEditStatus"><option value="draft">Черновик</option><option value="provisioning">Добавляется</option><option value="active">Доступно</option><option value="degraded">Предупреждение</option><option value="failed">Недоступно</option><option value="archived">Архив</option></select></label>
+        </div>
+      </form>
+      <footer class="settings-footer"><span>Изменения сохраняются в portal DB</span><div class="manage-footer-actions"><button type="button" class="button ghost" data-close="deviceEditDialog">Отмена</button><button class="button primary" type="submit" form="deviceEditForm">Сохранить</button></div></footer>
     </div>
   </dialog>
 

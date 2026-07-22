@@ -58,12 +58,20 @@ class SiteCreate(APIModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class SiteUpdate(APIModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    timezone: str | None = None
+    proxy_id: str | None = None
+    tags: list[str] | None = None
+
+
 class SiteOut(APIModel):
     id: str
     name: str
     timezone: str
     proxy_id: str | None
     tags: list[str]
+    devices_count: int = 0
 
 
 class DeviceCreate(APIModel):
@@ -77,6 +85,19 @@ class DeviceCreate(APIModel):
     vendor: str | None = None
     model: str | None = None
     auto_provision: bool = True
+
+
+class DeviceUpdate(APIModel):
+    site_id: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    address: str | None = Field(default=None, min_length=1, max_length=255)
+    device_type: str | None = Field(default=None, min_length=1, max_length=64)
+    protocol: str | None = None
+    monitoring_subtype: str | None = None
+    credential_profile_id: str | None = None
+    vendor: str | None = None
+    model: str | None = None
+    status: str | None = None
 
 
 class DeviceOut(APIModel):

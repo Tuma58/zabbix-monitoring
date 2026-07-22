@@ -25,10 +25,13 @@
   let accessToken = localStorage.getItem(TOKEN_KEY) || '';
   let apiOnline = false;
   let sitesCache = [];
+  let devicesCache = [];
   let credentialProfiles = [];
   let selectedCredentialProfileId = '';
   let probeNetworksDraft = [];
   let probeNetworksDefaults = [];
+  const siteDialog = $('#siteDialog');
+  const deviceEditDialog = $('#deviceEditDialog');
 
   const NAV_SECTIONS = ['overview', 'devices', 'problems', 'sites'];
 
@@ -307,13 +310,14 @@
   function renderDevices(devices, sitesById) {
     const list = $('#deviceList');
     if (!list) return;
+    devicesCache = devices;
     const head = list.querySelector('.device-list-head');
     list.innerHTML = '';
     if (head) list.appendChild(head);
     else {
       const heading = document.createElement('div');
       heading.className = 'device-list-head';
-      heading.innerHTML = '<span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Последние данные</span>';
+      heading.innerHTML = '<span>Устройство</span><span>Тип</span><span>Площадка</span><span>Состояние</span><span>Действия</span>';
       list.appendChild(heading);
     }
     if (!devices.length) {
@@ -326,16 +330,25 @@
     devices.forEach((device) => {
       const article = document.createElement('article');
       const siteName = sitesById[device.site_id] || '—';
-      article.innerHTML = `<span class="device-cell"><i class="device-icon ${device.device_type === 'ups' ? 'ups' : device.device_type === 'server' ? 'server' : 'router'}">${icon(device.device_type === 'ups' ? 'i-ups' : device.device_type === 'server' ? 'i-server' : 'i-router')}</i><span>${escapeHtml(device.name)}<small>${escapeHtml(device.address)}</small></span></span><span>${escapeHtml(device.device_type)}</span><span>${escapeHtml(siteName)}</span><span><i class="state-dot ${statusDot(device.status)}"></i>${statusLabel(device.status)}</span><span>только что</span>`;
+      article.innerHTML = `
+        <span class="device-cell"><i class="device-icon ${device.device_type === 'ups' ? 'ups' : device.device_type === 'server' ? 'server' : 'router'}">${icon(device.device_type === 'ups' ? 'i-ups' : device.device_type === 'server' ? 'i-server' : 'i-router')}</i><span>${escapeHtml(device.name)}<small>${escapeHtml(device.address)}</small></span></span>
+        <span>${escapeHtml(device.device_type)}${device.protocol ? `<small>${escapeHtml(device.protocol)}</small>` : ''}</span>
+        <span>${escapeHtml(siteName)}</span>
+        <span><i class="state-dot ${statusDot(device.status)}"></i>${statusLabel(device.status)}</span>
+        <span class="device-actions">
+          <button type="button" class="row-action" data-edit-device="${escapeHtml(device.id)}">Изменить</button>
+          <button type="button" class="row-action danger" data-delete-device="${escapeHtml(device.id)}">Удалить</button>
+        </span>`;
       list.appendChild(article);
     });
+    bindDeviceActions();
   }
 
   function renderSites(sites, devices) {
     const grid = $('#siteGrid');
     if (!grid) return;
     if (!sites.length) {
-      grid.innerHTML = '<article class="site-card empty-state"><p>Площадок пока нет. Создайте первую при добавлении устройства.</p></article>';
+      grid.innerHTML = '<article class="site-card empty-state"><p>Площадок пока нет. Создайте первую кнопкой «Добавить площадку».</p></article>';
       const filter = $('#siteFilter');
       if (filter) filter.innerHTML = '<option value="all">Все площадки</option>';
       return;
@@ -345,10 +358,21 @@
       return acc;
     }, {});
     grid.innerHTML = sites.map((site) => {
-      const count = counts[site.id] || 0;
+      const count = counts[site.id] || site.devices_count || 0;
       const slug = site.name.toLowerCase().replace(/\s+/g, '-');
-      return `<article class="site-card" data-site-card="${escapeHtml(slug)}"><div class="site-top"><span class="site-icon">${icon('i-map')}</span><span class="site-health ok">В норме</span></div><h3>${escapeHtml(site.name)}</h3><p>${escapeHtml(site.timezone)} · ${escapeHtml(site.proxy_id || 'без proxy')}</p><div class="site-stats"><span><b>${count}</b> устройств</span><span><b>0</b> проблем</span></div><div class="site-bar"><span style="width:96%"></span></div></article>`;
+      return `<article class="site-card" data-site-card="${escapeHtml(slug)}" data-site-id="${escapeHtml(site.id)}">
+        <div class="site-top"><span class="site-icon">${icon('i-map')}</span><span class="site-health ok">В норме</span></div>
+        <h3>${escapeHtml(site.name)}</h3>
+        <p>${escapeHtml(site.timezone)} · ${escapeHtml(site.proxy_id || 'без proxy')}</p>
+        <div class="site-stats"><span><b>${count}</b> устройств</span><span><b>0</b> проблем</span></div>
+        <div class="site-bar"><span style="width:96%"></span></div>
+        <div class="site-actions">
+          <button type="button" class="row-action" data-edit-site="${escapeHtml(site.id)}">Изменить</button>
+          <button type="button" class="row-action danger" data-delete-site="${escapeHtml(site.id)}" ${count ? 'disabled title="Сначала удалите устройства"' : ''}>Удалить</button>
+        </div>
+      </article>`;
     }).join('');
+    bindSiteActions();
 
     const filter = $('#siteFilter');
     if (filter) {
@@ -357,6 +381,154 @@
         return `<option value="${escapeHtml(slug)}">${escapeHtml(site.name)}</option>`;
       }).join('');
     }
+  }
+
+  function populateSiteEditSelect(selectedId = '') {
+    const select = $('#deviceEditSite');
+    if (!select) return;
+    select.innerHTML = sitesCache.map((site) =>
+      `<option value="${escapeHtml(site.id)}"${site.id === selectedId ? ' selected' : ''}>${escapeHtml(site.name)}</option>`,
+    ).join('');
+  }
+
+  function openSiteDialog(site = null) {
+    $('#siteEditId').value = site?.id || '';
+    $('#siteEditName').value = site?.name || '';
+    $('#siteEditTimezone').value = site?.timezone || 'Europe/Moscow';
+    $('#siteEditProxy').value = site?.proxy_id || '';
+    $('#siteDialogTitle').textContent = site ? 'Редактирование площадки' : 'Новая площадка';
+    $('#siteDialogHint').textContent = site
+      ? `ID: ${site.id}`
+      : 'Площадка используется для группировки устройств';
+    openDialog(siteDialog);
+    setTimeout(() => $('#siteEditName')?.focus(), 50);
+  }
+
+  function openDeviceEditDialog(device) {
+    if (!device) return;
+    $('#deviceEditId').value = device.id;
+    $('#deviceEditName').value = device.name || '';
+    $('#deviceEditAddress').value = device.address || '';
+    $('#deviceEditType').value = device.device_type || 'router';
+    $('#deviceEditProtocol').value = device.protocol || 'SNMPv3';
+    $('#deviceEditStatus').value = device.status || 'draft';
+    populateSiteEditSelect(device.site_id);
+    $('#deviceEditTitle').textContent = device.name || 'Редактирование';
+    openDialog(deviceEditDialog);
+  }
+
+  function bindSiteActions() {
+    $$('[data-edit-site]').forEach((button) => {
+      button.onclick = () => {
+        const site = sitesCache.find((item) => item.id === button.dataset.editSite);
+        if (site) openSiteDialog(site);
+      };
+    });
+    $$('[data-delete-site]').forEach((button) => {
+      button.onclick = async () => {
+        if (button.disabled) return;
+        const site = sitesCache.find((item) => item.id === button.dataset.deleteSite);
+        if (!site) return;
+        if (!window.confirm(`Удалить площадку «${site.name}»?`)) return;
+        try {
+          await api(`/sites/${encodeURIComponent(site.id)}`, { method: 'DELETE' });
+          showToast(`Площадка «${site.name}» удалена`);
+          await refreshDashboard();
+        } catch (error) {
+          showToast(error.payload?.message || error.message || 'Не удалось удалить площадку', 'error');
+        }
+      };
+    });
+  }
+
+  function bindDeviceActions() {
+    $$('[data-edit-device]').forEach((button) => {
+      button.onclick = () => {
+        const device = devicesCache.find((item) => item.id === button.dataset.editDevice);
+        if (device) openDeviceEditDialog(device);
+      };
+    });
+    $$('[data-delete-device]').forEach((button) => {
+      button.onclick = async () => {
+        const device = devicesCache.find((item) => item.id === button.dataset.deleteDevice);
+        if (!device) return;
+        if (!window.confirm(`Удалить устройство «${device.name}» (${device.address})?`)) return;
+        try {
+          await api(`/devices/${encodeURIComponent(device.id)}`, { method: 'DELETE' });
+          showToast(`Устройство «${device.name}» удалено`);
+          await refreshDashboard();
+        } catch (error) {
+          showToast(error.payload?.message || error.message || 'Не удалось удалить устройство', 'error');
+        }
+      };
+    });
+  }
+
+  async function saveSiteForm(event) {
+    event.preventDefault();
+    const id = $('#siteEditId')?.value || '';
+    const name = ($('#siteEditName')?.value || '').trim();
+    const timezone = ($('#siteEditTimezone')?.value || 'Europe/Moscow').trim();
+    const proxyId = ($('#siteEditProxy')?.value || '').trim();
+    if (!name) {
+      showToast('Укажите название площадки', 'error');
+      return;
+    }
+    const body = {
+      name,
+      timezone: timezone || 'Europe/Moscow',
+      proxy_id: proxyId || null,
+      tags: [],
+    };
+    try {
+      if (id) {
+        await api(`/sites/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+        showToast(`Площадка «${name}» обновлена`);
+      } else {
+        await api('/sites', { method: 'POST', body });
+        showToast(`Площадка «${name}» создана`);
+      }
+      closeDialog(siteDialog);
+      await refreshDashboard();
+      navigateToSection('sites');
+    } catch (error) {
+      showToast(error.payload?.message || error.message || 'Не удалось сохранить площадку', 'error');
+    }
+  }
+
+  async function saveDeviceEditForm(event) {
+    event.preventDefault();
+    const id = $('#deviceEditId')?.value;
+    if (!id) return;
+    const body = {
+      name: ($('#deviceEditName')?.value || '').trim(),
+      address: ($('#deviceEditAddress')?.value || '').trim(),
+      site_id: $('#deviceEditSite')?.value,
+      device_type: $('#deviceEditType')?.value,
+      protocol: $('#deviceEditProtocol')?.value,
+      status: $('#deviceEditStatus')?.value,
+    };
+    if (!body.name || !body.address || !body.site_id) {
+      showToast('Заполните обязательные поля', 'error');
+      return;
+    }
+    try {
+      await api(`/devices/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+      closeDialog(deviceEditDialog);
+      showToast(`Устройство «${body.name}» обновлено`);
+      await refreshDashboard();
+      navigateToSection('devices');
+    } catch (error) {
+      showToast(error.payload?.message || error.message || 'Не удалось сохранить устройство', 'error');
+    }
+  }
+
+  async function createSiteInteractive() {
+    if (!accessToken || !apiOnline) {
+      const loggedIn = await promptLogin('Войдите, чтобы добавить площадку');
+      if (!loggedIn) return;
+    }
+    openSiteDialog(null);
   }
 
   function applySummary(summary, problemTotal) {
@@ -428,6 +600,10 @@
     const settingsSitesCount = $('#settingsSitesCount');
     if (settingsSitesMeta) settingsSitesMeta.textContent = `${summary.sites_total || 0} площадок`;
     if (settingsSitesCount) settingsSitesCount.textContent = String(summary.sites_total || 0);
+    const settingsDevicesMeta = $('#settingsDevicesMeta');
+    const settingsDevicesCount = $('#settingsDevicesCount');
+    if (settingsDevicesMeta) settingsDevicesMeta.textContent = `${summary.devices_total || 0} в каталоге`;
+    if (settingsDevicesCount) settingsDevicesCount.textContent = String(summary.devices_total || 0);
     const settingsSystemMeta = $('#settingsSystemMeta');
     const settingsSystemStatus = $('#settingsSystemStatus');
     if (settingsSystemMeta) settingsSystemMeta.textContent = summary.stale ? 'Данные устарели' : 'API и portal DB';
@@ -601,28 +777,6 @@
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     syncNavFromHash();
     body.classList.remove('nav-open');
-  }
-
-  async function createSiteInteractive() {
-    if (!accessToken || !apiOnline) {
-      const loggedIn = await promptLogin('Войдите, чтобы добавить площадку');
-      if (!loggedIn) return;
-    }
-    const name = (window.prompt('Название площадки', 'Основная') || '').trim();
-    if (!name) return;
-    try {
-      const created = await api('/sites', {
-        method: 'POST',
-        body: { name, timezone: 'Europe/Moscow', tags: [] },
-      });
-      sitesCache.push(created);
-      populateWizardSites(sitesCache);
-      await refreshDashboard();
-      navigateToSection('sites');
-      showToast(`Площадка «${name}» создана`);
-    } catch (error) {
-      showToast(error.message || 'Не удалось создать площадку');
-    }
   }
 
   function syncNavFromHash() {
@@ -1116,7 +1270,7 @@
     if (button.dataset.close === 'loginDialog') closeLoginDialog(false);
     else closeDialog(dialog);
   }));
-  [wizard, settings, $('#loginDialog')].filter(Boolean).forEach((dialog) => {
+  [wizard, settings, siteDialog, deviceEditDialog, $('#loginDialog')].filter(Boolean).forEach((dialog) => {
     dialog.addEventListener('click', (event) => {
       if (event.target !== dialog) return;
       if (dialog.id === 'loginDialog') closeLoginDialog(false);
@@ -1129,6 +1283,9 @@
       }
     });
   });
+
+  $('#siteForm')?.addEventListener('submit', saveSiteForm);
+  $('#deviceEditForm')?.addEventListener('submit', saveDeviceEditForm);
 
   bindAcknowledgeButtons();
   $$('[data-toast]').forEach((button) => button.addEventListener('click', () => showToast(button.dataset.toast)));
