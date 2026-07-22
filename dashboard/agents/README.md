@@ -6,10 +6,12 @@
 
 Подставьте адрес вашего dashboard (обычно `https://PUBLIC_IP:7444`) и имя хоста агента.
 
+> Dashboard отдаёт **самоподписанный** HTTPS — в командах нужен `curl -k` (или HTTP на `:7081`, если доступен).
+
 ### Linux (Ubuntu 22.04/24.04, Debian 12, RHEL/Alma/Rocky 9)
 
 ```bash
-curl -fsSL "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" \
+curl -fsSLk "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" \
   | sudo bash -s -- --base "https://HOST:7444" --server HOST --hostname my-linux-host
 ```
 
@@ -18,6 +20,7 @@ curl -fsSL "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" \
 ### Windows (PowerShell от администратора)
 
 ```powershell
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 & ([scriptblock]::Create((irm "https://HOST:7444/agents/scripts/deploy-agent2-windows.ps1"))) `
   -BaseUrl "https://HOST:7444" -ZabbixServer HOST -Hostname win-srv-01
 ```

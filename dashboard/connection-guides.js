@@ -42,6 +42,26 @@
     return `${serverUrl()}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
+  /** curl flags for dashboard mirror (self-signed TLS on :7444). */
+  function curlFlags() {
+    return window.location.protocol === 'https:' ? '-fsSLk' : '-fsSL';
+  }
+
+  /** PowerShell preamble to trust self-signed NetMon cert before irm/iwr. */
+  function psTrustCertPreamble() {
+    if (window.location.protocol !== 'https:') return '';
+    return '[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }\n';
+  }
+
+  function tlsNote() {
+    if (window.location.protocol !== 'https:') return '';
+    return warn(
+      'HTTPS dashboard использует <strong>самоподписанный</strong> сертификат. '
+      + 'В командах ниже уже есть <code>curl -k</code> / отключение проверки в PowerShell. '
+      + 'Либо скачивайте по HTTP (порт <code>7081</code>), если он доступен из вашей сети.',
+    );
+  }
+
   const SUBTYPES = {
     server: [
       { value: 'win', label: 'Windows Server' },
@@ -132,9 +152,11 @@
         Базовый URL зеркала: <code>${serverUrl()}</code>.`)}
 
       ${section('0. Деплой одной командой (рекомендуется)', `
+        ${tlsNote()}
         <p>PowerShell <strong>от имени администратора</strong> на целевом Windows-хосте:</p>
         ${pre(
-          `& ([scriptblock]::Create((irm "${assetUrl(ASSETS.ps1Deploy)}"))) \`\n`
+          `${psTrustCertPreamble()}`
+          + `& ([scriptblock]::Create((irm "${assetUrl(ASSETS.ps1Deploy)}"))) \`\n`
           + `  -BaseUrl "${serverUrl()}" -ZabbixServer ${host()} -Hostname ${hostnameExample}`,
         )}
         <p>Скрипт скачает MSI с зеркала, установит Agent 2 и пропишет Server / ServerActive / Hostname.</p>
@@ -175,6 +197,7 @@
         <p><strong>Вариант B — тихая установка из PowerShell (от имени администратора):</strong></p>
         ${pre(
           `$msi = "$env:TEMP\\zabbix_agent2-7.0.28-windows-amd64-openssl.msi"\n`
+          + `${psTrustCertPreamble()}`
           + `Invoke-WebRequest -Uri "${assetUrl(ASSETS.winAgent2Msi)}" -OutFile $msi\n`
           + `msiexec /i $msi /qn /norestart \`\n`
           + `  SERVER=${host()} \`\n`
@@ -184,7 +207,8 @@
         )}
         <p>Либо скачайте и выполните локальный скрипт зеркала (нужен уже скачанный MSI рядом):</p>
         ${pre(
-          `Invoke-WebRequest -Uri "${assetUrl(ASSETS.ps1Install)}" -OutFile .\\install-agent2-windows.ps1\n`
+          `${psTrustCertPreamble()}`
+          + `Invoke-WebRequest -Uri "${assetUrl(ASSETS.ps1Install)}" -OutFile .\\install-agent2-windows.ps1\n`
           + `powershell -ExecutionPolicy Bypass -File .\\install-agent2-windows.ps1 \`\n`
           + `  -ZabbixServer ${host()} -Hostname ${hostnameExample}`,
         )}
@@ -280,9 +304,10 @@
       ${callout(`Сервер мониторинга: <code>${host()}</code>. Зеркало: <code>${serverUrl()}</code>.`)}
 
       ${section('0. Деплой одной командой (рекомендуется)', `
+        ${tlsNote()}
         <p>На целевом Linux-хосте (root / sudo):</p>
         ${pre(
-          `curl -fsSL "${assetUrl(ASSETS.shDeployLinux)}" | sudo bash -s -- \\\n`
+          `curl ${curlFlags()} "${assetUrl(ASSETS.shDeployLinux)}" | sudo bash -s -- \\\n`
           + `  --base "${serverUrl()}" --server ${host()} --hostname ${hostnameExample}`,
         )}
         <p>Скрипт определит дистрибутив (Ubuntu/Debian/RHEL), скачает release-пакет с зеркала, установит
@@ -319,27 +344,27 @@
       ${section('3. Установка на Ubuntu / Debian', `
         ${pre(
           `# Ubuntu 22.04\n`
-          + `curl -fsSL -o /tmp/zabbix-release.deb "${assetUrl(ASSETS.ubuntuRelease)}"\n`
+          + `curl ${curlFlags()} -o /tmp/zabbix-release.deb "${assetUrl(ASSETS.ubuntuRelease)}"\n`
           + `sudo dpkg -i /tmp/zabbix-release.deb\n`
           + `sudo apt-get update\n`
           + `sudo apt-get install -y zabbix-agent2\n\n`
           + `# Debian 12 — тот же порядок, но release-пакет:\n`
-          + `# curl -fsSL -o /tmp/zabbix-release.deb "${assetUrl(ASSETS.debianRelease)}"`,
+          + `# curl ${curlFlags()} -o /tmp/zabbix-release.deb "${assetUrl(ASSETS.debianRelease)}"`,
         )}
         <p>Или скриптом зеркала (если пакеты уже лежат рядом со скриптом):</p>
         ${pre(
-          `curl -fsSL -o /tmp/install-agent2-debian-ubuntu.sh "${assetUrl(ASSETS.shDebUbuntu)}"\n`
+          `curl ${curlFlags()} -o /tmp/install-agent2-debian-ubuntu.sh "${assetUrl(ASSETS.shDebUbuntu)}"\n`
           + `sudo bash /tmp/install-agent2-debian-ubuntu.sh ${host()} ${hostnameExample}`,
         )}
       `)}
 
       ${section('4. Установка на RHEL / Alma / Rocky', `
         ${pre(
-          `curl -fsSL -o /tmp/zabbix-release.rpm "${assetUrl(ASSETS.rhelRelease)}"\n`
+          `curl ${curlFlags()} -o /tmp/zabbix-release.rpm "${assetUrl(ASSETS.rhelRelease)}"\n`
           + `sudo rpm -Uvh /tmp/zabbix-release.rpm\n`
           + `sudo dnf install -y zabbix-agent2\n\n`
           + `# или:\n`
-          + `curl -fsSL -o /tmp/install-agent2-rhel.sh "${assetUrl(ASSETS.shRhel)}"\n`
+          + `curl ${curlFlags()} -o /tmp/install-agent2-rhel.sh "${assetUrl(ASSETS.shRhel)}"\n`
           + `sudo bash /tmp/install-agent2-rhel.sh ${host()} ${hostnameExample}`,
         )}
       `)}
@@ -348,7 +373,7 @@
         <p>Файл: <code>/etc/zabbix/zabbix_agent2.conf</code></p>
         ${agentConfSnippet(hostnameExample)}
         <p>Можно сверить с примером с зеркала:</p>
-        ${pre(`curl -fsSL "${assetUrl(ASSETS.confExample)}" | less`)}
+        ${pre(`curl ${curlFlags()} "${assetUrl(ASSETS.confExample)}" | less`)}
         <p>Запуск и автозагрузка:</p>
         ${pre(
           `sudo systemctl enable --now zabbix-agent2\n`

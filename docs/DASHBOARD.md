@@ -56,10 +56,10 @@ Dashboard автоматически входит в portal API с учётно�
 
 Протокол подбирается автоматически (agent2 для ОС, SNMPv3 для сети и ИБП).
 
-Пример Linux (одна команда):
+Пример Linux (одна команда; `-k` из‑за самоподписанного сертификата):
 
 ```bash
-curl -fsSL "https://94.181.181.43:7444/agents/scripts/deploy-agent2-linux.sh" \
+curl -fsSLk "https://94.181.181.43:7444/agents/scripts/deploy-agent2-linux.sh" \
   | sudo bash -s -- --base "https://94.181.181.43:7444" \
       --server 94.181.181.43 --hostname my-linux-host
 ```

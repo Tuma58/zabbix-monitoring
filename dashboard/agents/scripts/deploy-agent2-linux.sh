@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Однокомандный деплой Zabbix Agent 2 с зеркала NetMon dashboard.
 #
-# Примеры:
-#   curl -fsSL "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" \
+# Dashboard использует самоподписанный TLS — добавляйте -k к curl:
+#   curl -fsSLk "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" \
 #     | sudo bash -s -- --base "https://HOST:7444" --server HOST --hostname my-host
 #
-#   NETMON_BASE_URL=https://HOST:7444 curl -fsSL "$NETMON_BASE_URL/agents/scripts/deploy-agent2-linux.sh" \
-#     | sudo bash -s -- HOST my-host
+# Альтернатива без TLS: HTTP-порт dashboard (если доступен), например :7081
+#   curl -fsSL "http://HOST:7081/agents/scripts/deploy-agent2-linux.sh" \
+#     | sudo bash -s -- --base "http://HOST:7081" --server HOST --hostname my-host
 #
 set -euo pipefail
 
@@ -14,6 +15,8 @@ BASE_URL="${NETMON_BASE_URL:-}"
 SERVER="${ZABBIX_SERVER:-}"
 HOSTNAME_VALUE="${ZABBIX_HOSTNAME:-$(hostname -s 2>/dev/null || echo agent-host)}"
 ACTIVE_ONLY=0
+# Default insecure: NetMon edge cert is self-signed by design.
+INSECURE="${NETMON_INSECURE:-1}"
 
 usage() {
   cat <<'EOF'
@@ -26,10 +29,15 @@ Options:
   --server HOST    Zabbix Server / ServerActive address
   --hostname NAME  Agent Hostname (must match Zabbix host name)
   --active-only    Leave ListenPort commented / prefer active checks
+  --insecure       Allow self-signed HTTPS when downloading from mirror (default)
+  --secure         Require valid TLS certificate for mirror downloads
   -h, --help       Show this help
 
 Environment:
-  NETMON_BASE_URL, ZABBIX_SERVER, ZABBIX_HOSTNAME
+  NETMON_BASE_URL, ZABBIX_SERVER, ZABBIX_HOSTNAME, NETMON_INSECURE=0|1
+
+Fetch the script itself with curl -k when using HTTPS:
+  curl -fsSLk "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" | sudo bash -s -- ...
 EOF
 }
 
@@ -39,6 +47,8 @@ while [[ $# -gt 0 ]]; do
     --server) SERVER="${2:-}"; shift 2 ;;
     --hostname) HOSTNAME_VALUE="${2:-}"; shift 2 ;;
     --active-only) ACTIVE_ONLY=1; shift ;;
+    --insecure) INSECURE=1; shift ;;
+    --secure) INSECURE=0; shift ;;
     -h|--help) usage; exit 0 ;;
     --*) echo "Unknown option: $1" >&2; usage; exit 1 ;;
     *)
@@ -75,10 +85,18 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+CURL_OPTS=(-fsSL --retry 3 --retry-delay 2)
+if [[ "$INSECURE" == "1" ]]; then
+  CURL_OPTS+=(-k)
+  if [[ "$BASE_URL" == https://* ]]; then
+    echo "Note: downloading mirror over HTTPS with certificate verification disabled (self-signed NetMon cert)." >&2
+  fi
+fi
+
 download() {
   local url="$1" out="$2"
   echo "↓ $url"
-  curl -fsSL --retry 3 --retry-delay 2 -o "$out" "$url"
+  curl "${CURL_OPTS[@]}" -o "$out" "$url"
 }
 
 configure_agent() {
