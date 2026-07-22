@@ -11,6 +11,7 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
   const body = document.body;
+  const isAddDevicePage = body.dataset.page === 'add-device';
   const wizard = $('#deviceWizard');
   const settings = $('#settingsDialog');
   const form = $('#deviceForm');
@@ -94,13 +95,21 @@
   }
 
   function openDialog(dialog) {
+    if (!dialog) return;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   }
 
   function closeDialog(dialog) {
+    if (!dialog) return;
     if (typeof dialog.close === 'function') dialog.close();
     else dialog.removeAttribute('open');
+  }
+
+  function closeWizard() {
+    if (!wizard) return;
+    if (wizard.tagName === 'DIALOG') closeDialog(wizard);
+    else window.location.href = 'index.html#devices';
   }
 
   function setFooter(message) {
@@ -210,8 +219,8 @@
       apiOnline = false;
       setFooter('API недоступен');
       setSyncState('API недоступен', false);
-      $('#systemStatusTitle').textContent = 'API недоступен';
-      $('#systemStatusMeta').textContent = 'проверьте подключение';
+      if ($('#systemStatusTitle')) $('#systemStatusTitle').textContent = 'API недоступен';
+      if ($('#systemStatusMeta')) $('#systemStatusMeta').textContent = 'проверьте подключение';
       return false;
     }
 
@@ -231,17 +240,17 @@
     } catch (error) {
       setFooter('API доступен, но вход не выполнен');
       setSyncState('Нужна авторизация', false);
-      $('#systemStatusTitle').textContent = 'Нет сессии';
-      $('#systemStatusMeta').textContent = error.message || 'login failed';
+      if ($('#systemStatusTitle')) $('#systemStatusTitle').textContent = 'Нет сессии';
+      if ($('#systemStatusMeta')) $('#systemStatusMeta').textContent = error.message || 'login failed';
       return false;
     }
   }
 
   function applyUser(me) {
     const name = me.email.split('@')[0];
-    $('#userName').textContent = name;
-    $('#userRole').textContent = (me.roles || []).join(', ') || 'viewer';
-    $('#userAvatar').textContent = name.slice(0, 2).toUpperCase();
+    if ($('#userName')) $('#userName').textContent = name;
+    if ($('#userRole')) $('#userRole').textContent = (me.roles || []).join(', ') || 'viewer';
+    if ($('#userAvatar')) $('#userAvatar').textContent = name.slice(0, 2).toUpperCase();
     const greeting = `Здравствуйте, ${name.charAt(0).toUpperCase()}${name.slice(1)}`;
     const greetingNode = $('#overviewGreeting');
     if (greetingNode) greetingNode.textContent = greeting;
@@ -718,6 +727,25 @@
     const ready = await ensureSession();
     if (!ready) return;
 
+    if (isAddDevicePage) {
+      const [sites, health] = await Promise.all([
+        api('/sites'),
+        api('/health/ready'),
+      ]);
+      sitesCache = sites;
+      populateWizardSites(sites);
+      await loadCredentialProfiles();
+      if ($('#systemStatusTitle')) {
+        $('#systemStatusTitle').textContent = health.status === 'ok' ? 'Система работает' : 'Зависимости деградированы';
+      }
+      if ($('#systemStatusMeta')) {
+        $('#systemStatusMeta').textContent = health.status === 'ok' ? 'API · готов к добавлению' : 'проверьте сервисы';
+      }
+      setSyncState(health.status === 'ok' ? 'Готово к добавлению' : 'Зависимости деградированы', health.status === 'ok');
+      setFooter('Мастер добавления · /api/v1');
+      return;
+    }
+
     const [summary, problems, devices, sites, health] = await Promise.all([
       api('/dashboard/summary'),
       api('/problems'),
@@ -1168,11 +1196,15 @@
           auto_provision: $('#startMonitoring')?.checked !== false,
         },
       });
-      closeDialog(wizard);
+      closeWizard();
       const provisionNote = $('#startMonitoring')?.checked !== false
         ? ' и отправлено в Zabbix (если API включён)'
         : '';
       showToast(`${name} добавлено в инвентарь портала${provisionNote}`);
+      if (isAddDevicePage) {
+        setTimeout(() => { window.location.href = 'index.html#devices'; }, 600);
+        return;
+      }
       await refreshDashboard();
     } catch (error) {
       showToast(error.message || 'Не удалось создать устройство');
@@ -1200,11 +1232,17 @@
     if (normalized) $('#devices').scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  [$('#addDeviceTop'), $('#addDeviceInline')].forEach((button) => button.addEventListener('click', () => {
+  [$('#addDeviceTop'), $('#addDeviceInline')].filter(Boolean).forEach((button) => {
+    if (button.tagName === 'A') return;
+    button.addEventListener('click', () => {
+      window.location.href = 'add-device.html';
+    });
+  });
+
+  if (isAddDevicePage && wizard && form) {
     resetWizard();
-    openDialog(wizard);
-    setTimeout(() => $('#deviceName').focus(), 80);
-  }));
+    setTimeout(() => $('#deviceName')?.focus(), 80);
+  }
 
   $('#openSettings')?.addEventListener('click', () => {
     body.classList.remove('nav-open');
@@ -1268,12 +1306,15 @@
   $$('[data-close]').forEach((button) => button.addEventListener('click', () => {
     const dialog = $(`#${button.dataset.close}`);
     if (button.dataset.close === 'loginDialog') closeLoginDialog(false);
+    else if (button.dataset.close === 'deviceWizard') closeWizard();
     else closeDialog(dialog);
   }));
   [wizard, settings, siteDialog, deviceEditDialog, $('#loginDialog')].filter(Boolean).forEach((dialog) => {
+    if (dialog.tagName !== 'DIALOG') return;
     dialog.addEventListener('click', (event) => {
       if (event.target !== dialog) return;
       if (dialog.id === 'loginDialog') closeLoginDialog(false);
+      else if (dialog.id === 'deviceWizard') closeWizard();
       else closeDialog(dialog);
     });
     dialog.addEventListener('close', () => {
@@ -1335,5 +1376,5 @@
     setFooter('Не удалось загрузить API');
     showToast(error.message || 'Ошибка загрузки dashboard');
   });
-  syncNavFromHash();
+  if (!isAddDevicePage) syncNavFromHash();
 })();

@@ -10,8 +10,10 @@
     rhelRelease: '/agents/linux/rhel/zabbix-release-latest-7.0.el9.noarch.rpm',
     linuxStatic: '/agents/linux/zabbix_agent-7.0.28-linux-3.0-amd64-static.tar.gz',
     ps1Install: '/agents/scripts/install-agent2-windows.ps1',
+    ps1Deploy: '/agents/scripts/deploy-agent2-windows.ps1',
     shDebUbuntu: '/agents/scripts/install-agent2-debian-ubuntu.sh',
     shRhel: '/agents/scripts/install-agent2-rhel.sh',
+    shDeployLinux: '/agents/scripts/deploy-agent2-linux.sh',
     confExample: '/agents/configs/zabbix_agent2.conf.example',
     agentsReadme: '/agents/README.md',
     tplWinActive: '/templates/os/windows_agent_active/template_os_windows_agent_active.yaml',
@@ -31,7 +33,13 @@
   }
 
   function serverUrl() {
-    return `${window.location.protocol}//${window.location.hostname}`;
+    return window.location.origin || `${window.location.protocol}//${window.location.hostname}`;
+  }
+
+  function assetUrl(path) {
+    if (!path) return '';
+    if (/^https?:\/\//i.test(path)) return path;
+    return `${serverUrl()}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
   const SUBTYPES = {
@@ -123,6 +131,18 @@
       ${callout(`Адрес сервера мониторинга (подставляется автоматически): <code>${host()}</code>.
         Базовый URL зеркала: <code>${serverUrl()}</code>.`)}
 
+      ${section('0. Деплой одной командой (рекомендуется)', `
+        <p>PowerShell <strong>от имени администратора</strong> на целевом Windows-хосте:</p>
+        ${pre(
+          `& ([scriptblock]::Create((irm "${assetUrl(ASSETS.ps1Deploy)}"))) \`\n`
+          + `  -BaseUrl "${serverUrl()}" -ZabbixServer ${host()} -Hostname ${hostnameExample}`,
+        )}
+        <p>Скрипт скачает MSI с зеркала, установит Agent 2 и пропишет Server / ServerActive / Hostname.</p>
+        ${links([
+          link(ASSETS.ps1Deploy, 'deploy-agent2-windows.ps1 — one-command'),
+        ])}
+      `)}
+
       ${section('1. Предварительные требования', `
         ${steps([
           `Права локального администратора на ${roleLabel}.`,
@@ -140,11 +160,12 @@
           link(ASSETS.winAgent2Msi, 'Zabbix agent 2 7.0.28 — MSI (amd64, OpenSSL)'),
           link(ASSETS.winAgent2Zip, 'Zabbix agent 2 — static ZIP (без установщика)'),
           link(ASSETS.winAgentMsi, 'Zabbix agent (классический) 7.0.28 — MSI (только при необходимости)'),
-          link(ASSETS.ps1Install, 'Скрипт тихой установки install-agent2-windows.ps1'),
+          link(ASSETS.ps1Deploy, 'Скрипт one-command deploy-agent2-windows.ps1'),
+          link(ASSETS.ps1Install, 'Скрипт тихой установки install-agent2-windows.ps1 (локальный MSI)'),
           link(ASSETS.confExample, 'Пример конфига zabbix_agent2.conf.example'),
           link(ASSETS.agentsReadme, 'README по агентам'),
         ])}
-        ${callout('Предпочтительно: <strong>agent 2 MSI</strong>. Классический agent используйте только если политика безопасности запрещает agent 2.')}
+        ${callout('Предпочтительно: <strong>agent 2 MSI</strong> через one-command скрипт. Классический agent используйте только если политика безопасности запрещает agent 2.')}
       `)}
 
       ${section('3. Установка (GUI или тихий MSI)', `
@@ -154,18 +175,18 @@
         <p><strong>Вариант B — тихая установка из PowerShell (от имени администратора):</strong></p>
         ${pre(
           `$msi = "$env:TEMP\\zabbix_agent2-7.0.28-windows-amd64-openssl.msi"\n`
-          + `Invoke-WebRequest -Uri "${ASSETS.winAgent2Msi}" -OutFile $msi\n`
+          + `Invoke-WebRequest -Uri "${assetUrl(ASSETS.winAgent2Msi)}" -OutFile $msi\n`
           + `msiexec /i $msi /qn /norestart \`\n`
           + `  SERVER=${host()} \`\n`
           + `  SERVERACTIVE=${host()} \`\n`
           + `  HOSTNAME=${hostnameExample} \`\n`
           + `  ENABLEPATH=1`,
         )}
-        <p>Либо скачайте и выполните скрипт зеркала:</p>
+        <p>Либо скачайте и выполните локальный скрипт зеркала (нужен уже скачанный MSI рядом):</p>
         ${pre(
-          `Invoke-WebRequest -Uri "${ASSETS.ps1Install}" -OutFile .\\install-agent2-windows.ps1\n`
+          `Invoke-WebRequest -Uri "${assetUrl(ASSETS.ps1Install)}" -OutFile .\\install-agent2-windows.ps1\n`
           + `powershell -ExecutionPolicy Bypass -File .\\install-agent2-windows.ps1 \`\n`
-          + `  -Server ${host()} -Hostname ${hostnameExample}`,
+          + `  -ZabbixServer ${host()} -Hostname ${hostnameExample}`,
         )}
       `)}
 
@@ -258,6 +279,19 @@
 
       ${callout(`Сервер мониторинга: <code>${host()}</code>. Зеркало: <code>${serverUrl()}</code>.`)}
 
+      ${section('0. Деплой одной командой (рекомендуется)', `
+        <p>На целевом Linux-хосте (root / sudo):</p>
+        ${pre(
+          `curl -fsSL "${assetUrl(ASSETS.shDeployLinux)}" | sudo bash -s -- \\\n`
+          + `  --base "${serverUrl()}" --server ${host()} --hostname ${hostnameExample}`,
+        )}
+        <p>Скрипт определит дистрибутив (Ubuntu/Debian/RHEL), скачает release-пакет с зеркала, установит
+        <code>zabbix-agent2</code> и пропишет Server / ServerActive / Hostname.</p>
+        ${links([
+          link(ASSETS.shDeployLinux, 'deploy-agent2-linux.sh — one-command'),
+        ])}
+      `)}
+
       ${section('1. Предварительные требования', `
         ${steps([
           'Права root / sudo на целевой системе.',
@@ -274,8 +308,9 @@
           link(ASSETS.debianRelease, 'zabbix-release (Debian 12)'),
           link(ASSETS.rhelRelease, 'zabbix-release (RHEL 9 / Alma / Rocky)'),
           link(ASSETS.linuxStatic, 'Static tarball agent (без репозитория)'),
-          link(ASSETS.shDebUbuntu, 'Скрипт install-agent2-debian-ubuntu.sh'),
-          link(ASSETS.shRhel, 'Скрипт install-agent2-rhel.sh'),
+          link(ASSETS.shDeployLinux, 'Скрипт deploy-agent2-linux.sh (one-command)'),
+          link(ASSETS.shDebUbuntu, 'Скрипт install-agent2-debian-ubuntu.sh (локальные файлы)'),
+          link(ASSETS.shRhel, 'Скрипт install-agent2-rhel.sh (локальные файлы)'),
           link(ASSETS.confExample, 'Пример zabbix_agent2.conf.example'),
           link(ASSETS.agentsReadme, 'README по агентам'),
         ])}
@@ -284,27 +319,27 @@
       ${section('3. Установка на Ubuntu / Debian', `
         ${pre(
           `# Ubuntu 22.04\n`
-          + `curl -fsSL -o /tmp/zabbix-release.deb "${ASSETS.ubuntuRelease}"\n`
+          + `curl -fsSL -o /tmp/zabbix-release.deb "${assetUrl(ASSETS.ubuntuRelease)}"\n`
           + `sudo dpkg -i /tmp/zabbix-release.deb\n`
           + `sudo apt-get update\n`
           + `sudo apt-get install -y zabbix-agent2\n\n`
           + `# Debian 12 — тот же порядок, но release-пакет:\n`
-          + `# curl -fsSL -o /tmp/zabbix-release.deb "${ASSETS.debianRelease}"`,
+          + `# curl -fsSL -o /tmp/zabbix-release.deb "${assetUrl(ASSETS.debianRelease)}"`,
         )}
-        <p>Или одной командой скриптом зеркала:</p>
+        <p>Или скриптом зеркала (если пакеты уже лежат рядом со скриптом):</p>
         ${pre(
-          `curl -fsSL -o /tmp/install-agent2-debian-ubuntu.sh "${ASSETS.shDebUbuntu}"\n`
+          `curl -fsSL -o /tmp/install-agent2-debian-ubuntu.sh "${assetUrl(ASSETS.shDebUbuntu)}"\n`
           + `sudo bash /tmp/install-agent2-debian-ubuntu.sh ${host()} ${hostnameExample}`,
         )}
       `)}
 
       ${section('4. Установка на RHEL / Alma / Rocky', `
         ${pre(
-          `curl -fsSL -o /tmp/zabbix-release.rpm "${ASSETS.rhelRelease}"\n`
+          `curl -fsSL -o /tmp/zabbix-release.rpm "${assetUrl(ASSETS.rhelRelease)}"\n`
           + `sudo rpm -Uvh /tmp/zabbix-release.rpm\n`
           + `sudo dnf install -y zabbix-agent2\n\n`
           + `# или:\n`
-          + `curl -fsSL -o /tmp/install-agent2-rhel.sh "${ASSETS.shRhel}"\n`
+          + `curl -fsSL -o /tmp/install-agent2-rhel.sh "${assetUrl(ASSETS.shRhel)}"\n`
           + `sudo bash /tmp/install-agent2-rhel.sh ${host()} ${hostnameExample}`,
         )}
       `)}
@@ -313,7 +348,7 @@
         <p>Файл: <code>/etc/zabbix/zabbix_agent2.conf</code></p>
         ${agentConfSnippet(hostnameExample)}
         <p>Можно сверить с примером с зеркала:</p>
-        ${pre(`curl -fsSL "${ASSETS.confExample}" | less`)}
+        ${pre(`curl -fsSL "${assetUrl(ASSETS.confExample)}" | less`)}
         <p>Запуск и автозагрузка:</p>
         ${pre(
           `sudo systemctl enable --now zabbix-agent2\n`

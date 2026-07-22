@@ -282,6 +282,17 @@ dialog::backdrop { background: rgba(35,42,45,.37); backdrop-filter: blur(8px); a
 .modal-head { min-height: 90px; display: flex; align-items: center; justify-content: space-between; padding: 19px 23px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.4); }
 .modal-head h2 { margin: 0; font-size: 19px; letter-spacing: -.025em; }.modal-head > div > p:last-child { margin: 4px 0 0; color: var(--ink-soft); font-size: 9px; }
 .modal-head .eyebrow { margin-bottom: 4px; }.modal-close { background: rgba(255,255,255,.7); border-color: var(--border); }
+.topbar-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.topbar-title .eyebrow { margin: 0; }
+.topbar-title strong { font-size: 14px; letter-spacing: -.02em; }
+.content-wizard { max-width: 1080px; }
+.page-wizard { display: block; margin: 0 0 24px; border-radius: 22px; overflow: hidden; box-shadow: 0 18px 50px -28px rgba(35,42,45,.35); }
+.page-wizard .modal-shell { border-radius: 22px; border: 1px solid rgba(255,255,255,.65); background: rgba(250,248,245,.98); }
+.page-wizard .modal-head { min-height: 84px; }
+.page-wizard .wizard-content { max-height: none; }
+.page-wizard a.icon-button.modal-close { display: grid; place-items: center; text-decoration: none; color: inherit; }
+.page-wizard .wizard-footer a.button { text-decoration: none; }
+a.button { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .wizard-layout { display: grid; grid-template-columns: 205px 1fr; min-height: 585px; }
 .wizard-steps { padding: 23px 15px; border-right: 1px solid var(--border); background: rgba(242,238,232,.36); }
 .wizard-steps button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px; border: 0; border-radius: 12px; background: transparent; text-align: left; cursor: default; }
