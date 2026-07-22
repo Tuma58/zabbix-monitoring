@@ -8,6 +8,7 @@ from app.errors import AppError, not_found
 from app.models import Device, DeviceStatus, Operation, OperationState, Site
 from app.schemas import DeviceCreate, DeviceOut, OperationOut, ProbeRequest
 from app.services.audit import record_audit
+from app.services.portal_settings import get_probe_networks
 from app.services.ssrf import assert_probe_target_allowed
 from app.services.zabbix_provisioner import provision_portal_device
 
@@ -120,7 +121,7 @@ def probe_device(
     site = db.get(Site, payload.site_id)
     if site is None:
         raise not_found("Site not found")
-    assert_probe_target_allowed(payload.address, settings.probe_allowlist_cidrs)
+    assert_probe_target_allowed(payload.address, get_probe_networks(db, settings))
 
     if idempotency_key:
         existing = db.scalar(select(Operation).where(Operation.idempotency_key == idempotency_key))

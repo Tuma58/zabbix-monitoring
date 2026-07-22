@@ -27,6 +27,8 @@
   let sitesCache = [];
   let credentialProfiles = [];
   let selectedCredentialProfileId = '';
+  let probeNetworksDraft = [];
+  let probeNetworksDefaults = [];
 
   const NAV_SECTIONS = ['overview', 'devices', 'problems', 'sites'];
 
@@ -435,6 +437,97 @@
     }
   }
 
+  function showSettingsHome() {
+    $('#settingsHome')?.removeAttribute('hidden');
+    $('#probeNetworksPanel')?.setAttribute('hidden', '');
+  }
+
+  function showProbeNetworksPanel() {
+    $('#settingsHome')?.setAttribute('hidden', '');
+    $('#probeNetworksPanel')?.removeAttribute('hidden');
+  }
+
+  function renderProbeNetworksList() {
+    const list = $('#probeNetworksList');
+    if (!list) return;
+    if (!probeNetworksDraft.length) {
+      list.innerHTML = '<li><span>Список пуст</span></li>';
+      return;
+    }
+    list.innerHTML = probeNetworksDraft.map((cidr, index) =>
+      `<li><code>${escapeHtml(cidr)}</code><button type="button" class="text-button" data-remove-network="${index}">Удалить</button></li>`,
+    ).join('');
+    $$('[data-remove-network]', list).forEach((button) => {
+      button.addEventListener('click', () => {
+        const idx = Number(button.dataset.removeNetwork);
+        probeNetworksDraft.splice(idx, 1);
+        renderProbeNetworksList();
+      });
+    });
+  }
+
+  function normalizeNetworkInput(value) {
+    const raw = (value || '').trim();
+    if (!raw) return '';
+    if (raw.includes('/')) return raw;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(raw)) return `${raw}/32`;
+    return raw;
+  }
+
+  async function loadProbeNetworks() {
+    if (!accessToken || !apiOnline) return;
+    try {
+      const payload = await api('/settings/probe-networks');
+      probeNetworksDraft = [...(payload.networks || [])];
+      probeNetworksDefaults = [...(payload.defaults || [])];
+      const count = probeNetworksDraft.length;
+      const meta = $('#settingsNetworksMeta');
+      const countNode = $('#settingsNetworksCount');
+      const source = $('#probeNetworksSource');
+      if (meta) meta.textContent = `${count} сетей · источник ${payload.source === 'database' ? 'БД' : 'env'}`;
+      if (countNode) countNode.textContent = String(count);
+      if (source) {
+        source.textContent = payload.source === 'database'
+          ? 'Сети сохранены в базе портала и используются при проверке устройств.'
+          : 'Сейчас используются значения по умолчанию из конфигурации сервера. Сохраните список, чтобы управлять им здесь.';
+      }
+      renderProbeNetworksList();
+    } catch (error) {
+      showToast(error.message || 'Не удалось загрузить список сетей', 'error');
+    }
+  }
+
+  async function saveProbeNetworks() {
+    if (!probeNetworksDraft.length) {
+      showToast('Добавьте хотя бы одну сеть', 'error');
+      return;
+    }
+    try {
+      const payload = await api('/settings/probe-networks', {
+        method: 'PUT',
+        body: { networks: probeNetworksDraft },
+      });
+      probeNetworksDraft = [...payload.networks];
+      renderProbeNetworksList();
+      await loadProbeNetworks();
+      showToast('Список разрешённых сетей сохранён');
+    } catch (error) {
+      showToast(error.payload?.message || error.message || 'Не удалось сохранить сети', 'error');
+    }
+  }
+
+  async function resetProbeNetworks() {
+    try {
+      const payload = await api('/settings/probe-networks/reset', { method: 'POST' });
+      probeNetworksDraft = [...payload.networks];
+      renderProbeNetworksList();
+      await loadProbeNetworks();
+      showToast('Список сетей сброшен к умолчанию');
+    } catch (error) {
+      showToast(error.payload?.message || error.message || 'Не удалось сбросить сети', 'error');
+    }
+  }
+
   function populateWizardSites(sites) {
     const select = $('#deviceSite');
     if (!select) return;
@@ -464,6 +557,7 @@
     renderSites(sites, devices);
     populateWizardSites(sites);
     await loadCredentialProfiles();
+    await loadProbeNetworks();
     if (health.status !== 'ok') {
       setSyncState('Зависимости деградированы', false);
     }
@@ -964,8 +1058,41 @@
       showToast('Диалог настроек не найден');
       return;
     }
+    showSettingsHome();
+    loadProbeNetworks();
     openDialog(settings);
   });
+  $('#openProbeNetworks')?.addEventListener('click', () => {
+    showProbeNetworksPanel();
+    loadProbeNetworks();
+  });
+  $('#backToSettingsHome')?.addEventListener('click', () => showSettingsHome());
+  $('#probeNetworkAdd')?.addEventListener('click', () => {
+    const input = $('#probeNetworkInput');
+    const value = normalizeNetworkInput(input?.value || '');
+    if (!value) {
+      showToast('Введите CIDR или IP', 'error');
+      return;
+    }
+    if (probeNetworksDraft.includes(value)) {
+      showToast('Такая сеть уже есть', 'error');
+      return;
+    }
+    probeNetworksDraft.push(value);
+    if (input) input.value = '';
+    renderProbeNetworksList();
+  });
+  $('#probeNetworkInput')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      $('#probeNetworkAdd')?.click();
+    }
+  });
+  $('#probeNetworksForm')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    saveProbeNetworks();
+  });
+  $('#probeNetworksReset')?.addEventListener('click', () => resetProbeNetworks());
   $('#runProbe')?.addEventListener('click', () => { runProbe(); });
   $$('input[name="protocol"]').forEach((input) => input.addEventListener('change', updateConnectionGuide));
   $('#deviceType')?.addEventListener('change', () => {

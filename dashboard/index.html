@@ -303,15 +303,36 @@
 
   <dialog class="modal settings-modal" id="settingsDialog" aria-labelledby="settingsTitle">
     <div class="modal-shell">
-      <header class="modal-head"><div><p class="eyebrow">Управление</p><h2 id="settingsTitle">Настройки мониторинга</h2><p>Подключения, площадки и правила в одном месте.</p></div><button class="icon-button modal-close" data-close="settingsDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
-      <div class="settings-grid">
-        <button data-toast="Соединение с Zabbix API"><i class="setting-icon indigo"><svg><use href="#i-activity"/></svg></i><span><b>Подключение к Zabbix</b><small id="settingsZabbixMeta">Проверка…</small></span><em class="setting-ok" id="settingsZabbixStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+      <header class="modal-head"><div><p class="eyebrow">Управление</p><h2 id="settingsTitle">Настройки мониторинга</h2><p>Подключения, площадки и разрешённые сети.</p></div><button class="icon-button modal-close" data-close="settingsDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <div class="settings-grid" id="settingsHome">
+        <button type="button" data-toast="Соединение с Zabbix API"><i class="setting-icon indigo"><svg><use href="#i-activity"/></svg></i><span><b>Подключение к Zabbix</b><small id="settingsZabbixMeta">Проверка…</small></span><em class="setting-ok" id="settingsZabbixStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
         <button type="button" data-nav-section="sites"><i class="setting-icon green"><svg><use href="#i-map"/></svg></i><span><b>Площадки и proxy</b><small id="settingsSitesMeta">0 площадок</small></span><em id="settingsSitesCount">0</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Профили создаются автоматически при добавлении устройства"><i class="setting-icon terra"><svg><use href="#i-shield"/></svg></i><span><b>Профили подключения</b><small>SNMP, Agent PSK и IPMI</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Политики: каталог шаблонов Zabbix по типу устройства"><i class="setting-icon blue"><svg><use href="#i-sliders"/></svg></i><span><b>Политики мониторинга</b><small>Автовыбор шаблонов и интервалов</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Раздел пользователей будет подключён к RBAC"><i class="setting-icon indigo"><svg><use href="#i-eye"/></svg></i><span><b>Пользователи и роли</b><small>Администраторы, операторы, наблюдатели</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
-        <button data-toast="Состояние системы"><i class="setting-icon green"><svg><use href="#i-check"/></svg></i><span><b>Состояние системы</b><small id="settingsSystemMeta">API и Zabbix</small></span><em class="setting-ok" id="settingsSystemStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button type="button" id="openProbeNetworks"><i class="setting-icon blue"><svg><use href="#i-shield"/></svg></i><span><b>Разрешённые сети</b><small id="settingsNetworksMeta">для проверки устройств</small></span><em id="settingsNetworksCount">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button type="button" data-toast="Профили создаются автоматически при добавлении устройства"><i class="setting-icon terra"><svg><use href="#i-shield"/></svg></i><span><b>Профили подключения</b><small>SNMP, Agent PSK и IPMI</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button type="button" data-toast="Политики: каталог шаблонов Zabbix по типу устройства"><i class="setting-icon blue"><svg><use href="#i-sliders"/></svg></i><span><b>Политики мониторинга</b><small>Автовыбор шаблонов и интервалов</small></span><em>—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
+        <button type="button" data-toast="Состояние системы"><i class="setting-icon green"><svg><use href="#i-check"/></svg></i><span><b>Состояние системы</b><small id="settingsSystemMeta">API и Zabbix</small></span><em class="setting-ok" id="settingsSystemStatus">—</em><svg class="arrow"><use href="#i-chevron"/></svg></button>
       </div>
+      <section class="settings-panel" id="probeNetworksPanel" hidden>
+        <div class="settings-panel-head">
+          <button type="button" class="text-button" id="backToSettingsHome">← Назад</button>
+          <div>
+            <h3>Разрешённые сети</h3>
+            <p id="probeNetworksSource">Сети, которые можно проверять при добавлении устройств (CIDR).</p>
+          </div>
+        </div>
+        <form id="probeNetworksForm" class="networks-form">
+          <ul class="network-list" id="probeNetworksList" aria-label="Список сетей"></ul>
+          <div class="network-add">
+            <label class="field"><span>Добавить сеть (CIDR или IP)</span><input id="probeNetworkInput" placeholder="101.102.103.0/24 или 10.20.1.15" autocomplete="off"></label>
+            <button type="button" class="button secondary" id="probeNetworkAdd">Добавить</button>
+          </div>
+          <p class="networks-hint">Примеры: <code>192.168.0.0/16</code>, <code>10.0.0.0/8</code>, <code>101.102.103.10/32</code></p>
+          <div class="networks-actions">
+            <button type="button" class="button ghost" id="probeNetworksReset">Сбросить к умолчанию</button>
+            <button type="submit" class="button primary" id="probeNetworksSave">Сохранить</button>
+          </div>
+        </form>
+      </section>
       <footer class="settings-footer"><span><svg><use href="#i-shield"/></svg>Секреты никогда не отображаются после сохранения</span><button class="button primary" data-close="settingsDialog">Готово</button></footer>
     </div>
   </dialog>

@@ -189,6 +189,17 @@ class ProbeRequest(APIModel):
     credential_profile_id: str | None = None
 
 
+class ProbeNetworksOut(APIModel):
+    networks: list[str]
+    defaults: list[str] = Field(default_factory=list)
+    source: str = "env"
+    updated_at: datetime | None = None
+
+
+class ProbeNetworksUpdate(APIModel):
+    networks: list[str] = Field(min_length=1)
+
+
 class AuditEventOut(APIModel):
     id: str
     actor_id: str | None
