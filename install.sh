@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Установщик базового контура NetMon (PostgreSQL + Zabbix + API + dashboard).
 set -Eeuo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,34 +11,46 @@ log() {
 }
 
 fail() {
-  printf '[netmon] ERROR: %s\n' "$*" >&2
+  printf '[netmon] ОШИБКА: %s\n' "$*" >&2
   exit 1
 }
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    fail "Run as root: sudo ${SCRIPT_DIR}/install.sh"
+    fail "Запустите от root: sudo ${SCRIPT_DIR}/install.sh"
   fi
 }
 
 check_platform() {
-  [[ -r /etc/os-release ]] || fail "Cannot detect the operating system"
+  [[ -r /etc/os-release ]] || fail "Не удалось определить операционную систему"
   # shellcheck disable=SC1091
   source /etc/os-release
-  [[ "${ID:-}" == "ubuntu" ]] || fail "Supported OS: Ubuntu 22.04 or 24.04"
+  [[ "${ID:-}" == "ubuntu" ]] || fail "Поддерживается только Ubuntu 22.04 или 24.04"
   case "${VERSION_ID:-}" in
     22.04|24.04) ;;
-    *) fail "Unsupported Ubuntu version ${VERSION_ID:-unknown}; use 22.04 or 24.04" ;;
+    *) fail "Неподдерживаемая версия Ubuntu ${VERSION_ID:-unknown}; используйте 22.04 или 24.04" ;;
   esac
   case "$(dpkg --print-architecture)" in
     amd64|arm64) ;;
-    *) fail "Supported architectures: amd64 and arm64" ;;
+    *) fail "Поддерживаемые архитектуры: amd64 и arm64" ;;
   esac
+}
+
+detect_public_ip() {
+  local ip=""
+  ip="$(curl -fsS --connect-timeout 3 https://ifconfig.me/ip 2>/dev/null || true)"
+  if [[ -z "${ip}" ]]; then
+    ip="$(curl -fsS --connect-timeout 3 https://api.ipify.org 2>/dev/null || true)"
+  fi
+  if [[ -z "${ip}" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  printf '%s' "${ip:-SERVER_IP}"
 }
 
 install_docker() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
-    log "Installing Docker Engine from the official Docker repository"
+    log "Установка Docker Engine из официального репозитория Docker"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     apt-get install -y ca-certificates curl openssl iptables
@@ -63,7 +76,7 @@ install_docker() {
     apt-get install -y docker-ce docker-ce-cli containerd.io \
       docker-buildx-plugin docker-compose-plugin
   else
-    log "Docker Engine and Compose plugin are already installed"
+    log "Docker Engine и плагин Compose уже установлены"
   fi
 
   prefer_iptables_legacy
@@ -71,7 +84,7 @@ install_docker() {
 }
 
 prefer_iptables_legacy() {
-  # Mixed nft/legacy iptables breaks Docker bridge forwarding on some hosts.
+  # Смешение nft/legacy iptables ломает Docker bridge forwarding на части хостов.
   if [[ -x /usr/sbin/iptables-legacy ]]; then
     update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 || true
   fi
@@ -85,19 +98,19 @@ ensure_docker_daemon() {
     return
   fi
 
-  log "Starting Docker daemon"
+  log "Запуск Docker daemon"
   if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
     systemctl enable --now docker || true
   fi
 
   if ! docker info >/dev/null 2>&1; then
-    # Environments without systemd (some CI/cloud agents): start dockerd directly.
+    # Среды без systemd (часть CI/cloud-агентов): запускаем dockerd напрямую.
     mkdir -p /var/run /var/log
-    # Nested overlay filesystems cannot use the overlay storage driver.
+    # На вложенном overlay нельзя использовать storage-driver=overlay.
     if [[ ! -f /etc/docker/daemon.json ]] && findmnt -no FSTYPE /var/lib 2>/dev/null | grep -qi overlay; then
       mkdir -p /etc/docker
       printf '{\n  "storage-driver": "vfs"\n}\n' > /etc/docker/daemon.json
-      log "Detected nested overlay FS; configured Docker storage-driver=vfs"
+      log "Обнаружена вложенная overlay FS; настроен Docker storage-driver=vfs"
     fi
     if ! pgrep -x dockerd >/dev/null 2>&1; then
       dockerd --host=unix:///var/run/docker.sock >/var/log/dockerd.log 2>&1 &
@@ -107,13 +120,13 @@ ensure_docker_daemon() {
   local attempts=0
   while (( attempts < 30 )); do
     if docker info >/dev/null 2>&1; then
-      log "Docker daemon is ready"
+      log "Docker daemon готов"
       return
     fi
     attempts=$((attempts + 1))
     sleep 1
   done
-  fail "Docker daemon did not become ready; see /var/log/dockerd.log"
+  fail "Docker daemon не стал готовым; смотрите /var/log/dockerd.log"
 }
 
 random_secret() {
@@ -125,17 +138,56 @@ compose() {
     --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+# Веб-интерфейсы по умолчанию слушаются на всех интерфейсах (внешний IP VPS).
+ensure_public_web_binds() {
+  [[ -f "${ENV_FILE}" ]] || return 0
+
+  local public_ip dash_port api_port web_port
+  public_ip="$(detect_public_ip)"
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  dash_port="${DASHBOARD_PORT:-8081}"
+  api_port="${API_PORT:-8000}"
+  web_port="${ZABBIX_WEB_PORT:-8080}"
+
+  # Обновляем bind веб-сервисов на 0.0.0.0, если ещё loopback.
+  if grep -q '^ZABBIX_WEB_BIND=127.0.0.1$' "${ENV_FILE}"; then
+    sed -i 's/^ZABBIX_WEB_BIND=127.0.0.1$/ZABBIX_WEB_BIND=0.0.0.0/' "${ENV_FILE}"
+    log "ZABBIX_WEB_BIND переключён на 0.0.0.0 (доступ с внешнего IP)"
+  fi
+  if grep -q '^DASHBOARD_BIND=127.0.0.1$' "${ENV_FILE}"; then
+    sed -i 's/^DASHBOARD_BIND=127.0.0.1$/DASHBOARD_BIND=0.0.0.0/' "${ENV_FILE}"
+    log "DASHBOARD_BIND переключён на 0.0.0.0 (доступ с внешнего IP)"
+  fi
+  if grep -q '^API_BIND=127.0.0.1$' "${ENV_FILE}"; then
+    sed -i 's/^API_BIND=127.0.0.1$/API_BIND=0.0.0.0/' "${ENV_FILE}"
+    log "API_BIND переключён на 0.0.0.0 (доступ с внешнего IP)"
+  fi
+
+  # CORS для dashboard/API с внешнего IP.
+  local cors_value
+  cors_value="http://${public_ip}:${dash_port},http://${public_ip}:${web_port},http://127.0.0.1:${dash_port},http://localhost:${dash_port}"
+  if grep -q '^CORS_ORIGINS=' "${ENV_FILE}"; then
+    sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=${cors_value}|" "${ENV_FILE}"
+  else
+    printf 'CORS_ORIGINS=%s\n' "${cors_value}" >> "${ENV_FILE}"
+  fi
+  chmod 600 "${ENV_FILE}"
+}
+
 create_environment() {
   if [[ -f "${ENV_FILE}" ]]; then
-    log "Keeping existing ${ENV_FILE} and its secrets"
+    log "Сохранён существующий ${ENV_FILE} и его секреты"
     chmod 600 "${ENV_FILE}"
+    ensure_public_web_binds
     return
   fi
 
-  local db_password jwt_secret secrets_key
+  local db_password jwt_secret secrets_key public_ip
   db_password="$(random_secret)"
   jwt_secret="$(random_secret)"
   secrets_key="$(random_secret)"
+  public_ip="$(detect_public_ip)"
 
   umask 077
   {
@@ -154,15 +206,17 @@ create_environment() {
     printf 'ZABBIX_API_USER=%s\n' "${ZABBIX_API_USER:-}"
     printf 'ZABBIX_API_PASSWORD=%s\n' "${ZABBIX_API_PASSWORD:-}"
     printf 'PHP_TZ=%s\n' "${PHP_TZ:-Europe/Moscow}"
-    printf 'ZABBIX_WEB_BIND=%s\n' "${ZABBIX_WEB_BIND:-127.0.0.1}"
+    # Веб-интерфейсы сразу доступны по внешнему IP VPS.
+    printf 'ZABBIX_WEB_BIND=%s\n' "${ZABBIX_WEB_BIND:-0.0.0.0}"
     printf 'ZABBIX_WEB_PORT=%s\n' "${ZABBIX_WEB_PORT:-8080}"
-    printf 'ZABBIX_SERVER_BIND=%s\n' "${ZABBIX_SERVER_BIND:-127.0.0.1}"
+    # Trapper по умолчанию тоже на всех интерфейсах — для agent/proxy.
+    printf 'ZABBIX_SERVER_BIND=%s\n' "${ZABBIX_SERVER_BIND:-0.0.0.0}"
     printf 'ZABBIX_SERVER_PORT=%s\n' "${ZABBIX_SERVER_PORT:-10051}"
-    printf 'DASHBOARD_BIND=%s\n' "${DASHBOARD_BIND:-127.0.0.1}"
+    printf 'DASHBOARD_BIND=%s\n' "${DASHBOARD_BIND:-0.0.0.0}"
     printf 'DASHBOARD_PORT=%s\n' "${DASHBOARD_PORT:-8081}"
-    printf 'API_BIND=%s\n' "${API_BIND:-127.0.0.1}"
+    printf 'API_BIND=%s\n' "${API_BIND:-0.0.0.0}"
     printf 'API_PORT=%s\n' "${API_PORT:-8000}"
-    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://127.0.0.1:8081,http://localhost:8081}"
+    printf 'CORS_ORIGINS=%s\n' "${CORS_ORIGINS:-http://${public_ip}:8081,http://${public_ip}:8080,http://127.0.0.1:8081,http://localhost:8081}"
     printf 'PROBE_NETWORK_ALLOWLIST=%s\n' "${PROBE_NETWORK_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
     printf 'ZBX_CACHESIZE=128M\n'
     printf 'ZBX_HISTORYCACHESIZE=64M\n'
@@ -170,7 +224,8 @@ create_environment() {
     printf 'ZBX_VALUECACHESIZE=128M\n'
   } > "${ENV_FILE}"
   chmod 600 "${ENV_FILE}"
-  log "Created ${ENV_FILE} with random database and API secrets"
+  log "Создан ${ENV_FILE} со случайными секретами БД и API"
+  log "Веб-интерфейсы будут слушать 0.0.0.0 (доступ по внешнему IP)"
 }
 
 ensure_portal_database() {
@@ -179,14 +234,14 @@ ensure_portal_database() {
   source "${ENV_FILE}"
   portal_db="${PORTAL_DB:-netmon}"
   postgres_id="$(compose ps -q postgres)"
-  [[ -n "${postgres_id}" ]] || fail "PostgreSQL container is not running"
-  # Safe for existing volumes created before portal DB support.
+  [[ -n "${postgres_id}" ]] || fail "Контейнер PostgreSQL не запущен"
+  # Безопасно для томов, созданных до поддержки БД портала.
   if docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" -e PGUSER="${POSTGRES_USER:-zabbix}" \
     "${postgres_id}" \
     psql -d postgres -Atc "SELECT 1 FROM pg_database WHERE datname='${portal_db}'" | grep -q 1; then
-    log "Portal database ${portal_db} already exists"
+    log "БД портала ${portal_db} уже существует"
   else
-    log "Creating portal database ${portal_db}"
+    log "Создание БД портала ${portal_db}"
     docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" -e PGUSER="${POSTGRES_USER:-zabbix}" \
       "${postgres_id}" \
       psql -d postgres -c "CREATE DATABASE ${portal_db}"
@@ -194,17 +249,17 @@ ensure_portal_database() {
 }
 
 start_stack() {
-  [[ -f "${COMPOSE_FILE}" ]] || fail "Missing ${COMPOSE_FILE}; deploy the complete repository"
-  log "Validating Docker Compose configuration"
+  [[ -f "${COMPOSE_FILE}" ]] || fail "Не найден ${COMPOSE_FILE}; разместите полный репозиторий"
+  log "Проверка конфигурации Docker Compose"
   compose config --quiet
 
-  log "Building API image and starting the monitoring stack"
-  # Pull only published images; netmon-api is built locally.
+  log "Сборка образа API и запуск стека мониторинга"
+  # Тянем только публикуемые образы; netmon-api собирается локально.
   compose pull postgres zabbix-server zabbix-web dashboard || true
   if ! compose build api; then
-    log "BuildKit failed; retrying API image build with legacy builder"
+    log "BuildKit не удался; повторная сборка API legacy-сборщиком"
     DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 compose build api \
-      || fail "Failed to build API image"
+      || fail "Не удалось собрать образ API"
   fi
   compose up -d postgres
   wait_for_postgres
@@ -218,18 +273,18 @@ wait_for_postgres() {
   local postgres_status=""
 
   postgres_id="$(compose ps -q postgres)"
-  [[ -n "${postgres_id}" ]] || fail "PostgreSQL container was not created"
+  [[ -n "${postgres_id}" ]] || fail "Контейнер PostgreSQL не был создан"
 
   while (( attempts < 30 )); do
     postgres_status="$(docker inspect --format '{{.State.Health.Status}}' "${postgres_id}" 2>/dev/null || true)"
     if [[ "${postgres_status}" == "healthy" ]]; then
-      log "PostgreSQL is healthy"
+      log "PostgreSQL готов (healthy)"
       return
     fi
     attempts=$((attempts + 1))
     sleep 2
   done
-  fail "PostgreSQL did not become healthy; inspect docker compose logs"
+  fail "PostgreSQL не стал healthy; смотрите: docker compose logs postgres"
 }
 
 wait_for_services() {
@@ -243,13 +298,13 @@ wait_for_services() {
     while (( attempts < 45 )); do
       api_status="$(docker inspect --format '{{.State.Health.Status}}' "${api_id}" 2>/dev/null || true)"
       if [[ "${api_status}" == "healthy" ]]; then
-        log "Custom API is healthy"
+        log "Custom API готов (healthy)"
         break
       fi
       attempts=$((attempts + 1))
       sleep 2
     done
-    [[ "${api_status:-}" == "healthy" ]] || log "WARNING: API is not healthy yet; check: docker compose logs api"
+    [[ "${api_status:-}" == "healthy" ]] || log "ПРЕДУПРЕЖДЕНИЕ: API ещё не healthy; проверьте: docker compose logs api"
   fi
 }
 
@@ -257,72 +312,62 @@ print_next_steps() {
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
 
-  local zabbix_url dashboard_url api_url ssh_hint
-  if [[ "${ZABBIX_WEB_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    zabbix_url="http://127.0.0.1:${ZABBIX_WEB_PORT:-8080}"
+  local public_ip host_label zabbix_url dashboard_url api_url
+  public_ip="$(detect_public_ip)"
+  if [[ "${ZABBIX_WEB_BIND:-0.0.0.0}" == "127.0.0.1" ]]; then
+    host_label="127.0.0.1"
   else
-    zabbix_url="http://SERVER_IP:${ZABBIX_WEB_PORT:-8080}"
+    host_label="${public_ip}"
   fi
-  if [[ "${DASHBOARD_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    dashboard_url="http://127.0.0.1:${DASHBOARD_PORT:-8081}"
-  else
-    dashboard_url="http://SERVER_IP:${DASHBOARD_PORT:-8081}"
-  fi
-  if [[ "${API_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    api_url="http://127.0.0.1:${API_PORT:-8000}/api/v1"
-  else
-    api_url="http://SERVER_IP:${API_PORT:-8000}/api/v1"
-  fi
-  ssh_hint="ssh -L ${ZABBIX_WEB_PORT:-8080}:127.0.0.1:${ZABBIX_WEB_PORT:-8080} -L ${DASHBOARD_PORT:-8081}:127.0.0.1:${DASHBOARD_PORT:-8081} -L ${API_PORT:-8000}:127.0.0.1:${API_PORT:-8000} user@VPS_IP"
+
+  zabbix_url="http://${host_label}:${ZABBIX_WEB_PORT:-8080}"
+  dashboard_url="http://${host_label}:${DASHBOARD_PORT:-8081}"
+  api_url="http://${host_label}:${API_PORT:-8000}/api/v1"
 
   printf '\n'
   log "============================================================"
-  log " Installation completed"
+  log " Установка завершена"
   log "============================================================"
   printf '\n'
-  log "Service status:"
+  log "Статус сервисов:"
   compose ps
   printf '\n'
-  log "Access URLs:"
-  log "  Zabbix UI:  ${zabbix_url}"
-  log "  Dashboard:  ${dashboard_url}"
-  log "  API docs:   ${api_url}/docs"
-  log "  API live:   ${api_url}/health/live"
-  if [[ "${ZABBIX_WEB_BIND:-127.0.0.1}" == "127.0.0.1" \
-     || "${DASHBOARD_BIND:-127.0.0.1}" == "127.0.0.1" \
-     || "${API_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
-    log "  SSH tunnel (from your laptop):"
-    log "    ${ssh_hint}"
-  fi
+  log "Веб-интерфейсы (внешний доступ):"
+  log "  Zabbix UI:     ${zabbix_url}"
+  log "  Dashboard:     ${dashboard_url}"
+  log "  API docs:      ${api_url}/docs"
+  log "  API health:    ${api_url}/health/live"
+  log "  Внешний IP:    ${public_ip}"
   printf '\n'
   log "------------------------------------------------------------"
-  log " Secrets (store securely, then clear the terminal scrollback)"
+  log " Секреты (сохраните и очистите историю терминала)"
   log "------------------------------------------------------------"
-  log "  .env file:              ${ENV_FILE} (mode 0600)"
-  log "  PostgreSQL user:        ${POSTGRES_USER:-zabbix}"
-  log "  PostgreSQL password:    ${POSTGRES_PASSWORD}"
-  log "  Zabbix DB name:         ${POSTGRES_DB:-zabbix}"
-  log "  Portal DB name:         ${PORTAL_DB:-netmon}"
-  log "  Portal admin email:     ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
-  log "  Portal admin password:  ${BOOTSTRAP_ADMIN_PASSWORD}"
-  log "  JWT secret:             ${JWT_SECRET}"
-  log "  Secrets master key:     ${SECRETS_MASTER_KEY}"
-  log "  Zabbix UI login:        Admin"
-  log "  Zabbix UI password:     zabbix   (change immediately)"
+  log "  Файл .env:                 ${ENV_FILE} (права 0600)"
+  log "  Пользователь PostgreSQL:   ${POSTGRES_USER:-zabbix}"
+  log "  Пароль PostgreSQL:         ${POSTGRES_PASSWORD}"
+  log "  БД Zabbix:                 ${POSTGRES_DB:-zabbix}"
+  log "  БД портала:                ${PORTAL_DB:-netmon}"
+  log "  Email админа портала:      ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
+  log "  Пароль админа портала:     ${BOOTSTRAP_ADMIN_PASSWORD}"
+  log "  JWT secret:                ${JWT_SECRET}"
+  log "  Secrets master key:        ${SECRETS_MASTER_KEY}"
+  log "  Логин Zabbix UI:           Admin"
+  log "  Пароль Zabbix UI:          zabbix   (смените сразу после входа)"
   printf '\n'
-  log "Network binds:"
-  log "  Zabbix web:   ${ZABBIX_WEB_BIND:-127.0.0.1}:${ZABBIX_WEB_PORT:-8080}"
-  log "  Dashboard:    ${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_PORT:-8081}"
-  log "  API:          ${API_BIND:-127.0.0.1}:${API_PORT:-8000}"
-  log "  Trapper:      ${ZABBIX_SERVER_BIND:-127.0.0.1}:${ZABBIX_SERVER_PORT:-10051}"
+  log "Сетевые привязки:"
+  log "  Zabbix web:   ${ZABBIX_WEB_BIND:-0.0.0.0}:${ZABBIX_WEB_PORT:-8080}"
+  log "  Dashboard:    ${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-8081}"
+  log "  API:          ${API_BIND:-0.0.0.0}:${API_PORT:-8000}"
+  log "  Trapper:      ${ZABBIX_SERVER_BIND:-0.0.0.0}:${ZABBIX_SERVER_PORT:-10051}"
   printf '\n'
-  log "Useful commands:"
+  log "Полезные команды:"
   log "  cd ${SCRIPT_DIR}"
   log "  docker compose --env-file .env ps"
   log "  docker compose --env-file .env logs -f api"
   log "  curl -fsS ${api_url}/health/live"
   printf '\n'
-  log "Next: read ${SCRIPT_DIR}/docs/DEPLOYMENT.md"
+  log "Рекомендация по firewall: ограничьте 10051/TCP сетями agent/proxy."
+  log "Далее: ${SCRIPT_DIR}/docs/DEPLOYMENT.md"
   log "============================================================"
   printf '\n'
 }

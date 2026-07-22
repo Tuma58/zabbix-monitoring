@@ -20,21 +20,21 @@ PostgreSQL, Zabbix server, Zabbix web, custom API (`/api/v1`) и dashboard.
 
 - `22/TCP`: SSH, только из административной сети;
 - `10051/TCP`: active agents и Zabbix proxies, только из разрешённых подсетей
-  (по умолчанию bootstrap публикует порт на `127.0.0.1`; для боевых agent/proxy
-  смените `ZABBIX_SERVER_BIND` и ограничьте доступ в `DOCKER-USER`/security group);
+  (bootstrap по умолчанию публикует trapper на `0.0.0.0` — ограничьте firewall/
+  security group сетями agent/proxy);
 - `443/TCP`: custom portal после добавления Caddy;
-- `8080/TCP`: не публиковать; bootstrap по умолчанию bind-ит его на loopback;
-- `8081/TCP`: dashboard, также только loopback до подключения TLS;
-- `8000/TCP`: custom API docs/health, только loopback;
+- `8080/TCP`: Zabbix UI, по умолчанию доступен с внешнего IP (`0.0.0.0`);
+- `8081/TCP`: dashboard, по умолчанию доступен с внешнего IP;
+- `8000/TCP`: custom API docs/health, по умолчанию доступен с внешнего IP;
 - от VPS/proxy к устройствам: ICMP, `10050/TCP`, `161/UDP`, при необходимости
   `623/UDP` IPMI и vendor API ports.
 
 ## Сеть Compose
 
-Сервисы общаются в сети `netmon-backend`. Порты UI/API/trapper публикуются на
-`127.0.0.1` (настраивается через `*_BIND`). Agents и proxies подключаются к
-trapper через опубликованный порт хоста, а не через отдельную internal-сеть —
-так надёжнее на Docker с nftables и не ломает связь server↔PostgreSQL.
+Сервисы общаются в сети `netmon-backend`. Веб-порты UI/API по умолчанию
+публикуются на `0.0.0.0` (внешний IP VPS). При необходимости верните loopback
+через `ZABBIX_WEB_BIND` / `DASHBOARD_BIND` / `API_BIND=127.0.0.1` в `.env`.
+Trapper (`10051`) тоже на `0.0.0.0` — ограничьте его firewall allowlist-ом.
 
 ## Однокомандная установка
 
