@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Request
 from sqlalchemy import select
 
-from app.deps import AdminUser, DbSession, ViewerUser
+from app.deps import DbSession, OperatorUser, ViewerUser
 from app.errors import validation_failed
 from app.models import Site
 from app.schemas import SiteCreate, SiteOut
@@ -30,7 +30,7 @@ def list_sites(_: ViewerUser, db: DbSession) -> list[SiteOut]:
 
 
 @router.post("", response_model=SiteOut, status_code=201)
-def create_site(payload: SiteCreate, request: Request, user: AdminUser, db: DbSession) -> SiteOut:
+def create_site(payload: SiteCreate, request: Request, user: OperatorUser, db: DbSession) -> SiteOut:
     existing = db.scalar(select(Site).where(Site.name == payload.name))
     if existing is not None:
         raise validation_failed("Site already exists", details={"name": payload.name})

@@ -357,8 +357,39 @@ dialog::backdrop { background: rgba(35,42,45,.37); backdrop-filter: blur(8px); a
 
 .probe-card { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.65); }
 .probe-animation { width: 52px; height: 52px; position: relative; display: grid; place-items: center; }.probe-animation span { position: absolute; inset: 4px; border: 1px solid rgba(61,90,128,.18); border-radius: 50%; opacity: 0; }.probe-animation.running span { animation: probe 1.8s ease-out infinite; }.probe-animation.running span:nth-child(2){animation-delay:.5s}.probe-animation.running span:nth-child(3){animation-delay:1s}.probe-animation i { width: 35px; height: 35px; display: grid; place-items: center; z-index: 2; color: var(--indigo); border-radius: 11px; background: rgba(61,90,128,.1); }.probe-animation svg { width: 17px; }
-.probe-title strong, .probe-title span { display: block; }.probe-title strong { font-size: 10px; }.probe-title span { color: var(--ink-soft); font-size: 8px; }
-.check-list { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.45); }.check-list > div { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; min-height: 56px; padding: 10px 13px; border-bottom: 1px solid var(--border); }.check-list > div:last-child { border: 0; }.check-list i { width: 29px; height: 29px; display: grid; place-items: center; color: #95999a; border-radius: 9px; background: rgba(45,52,54,.05); }.check-list svg { width: 14px; }.check-list b, .check-list small { display: block; }.check-list b { font-size: 9px; }.check-list small { color: #999d9f; font-size: 7px; }.check-list em { color: #9a9ea0; font-size: 8px; font-style: normal; }.check-list > div.checking i { color: var(--indigo); background: rgba(61,90,128,.09); }.check-list > div.checking svg { animation: spin 1s linear infinite; }.check-list > div.success i { color: #fff; background: var(--green); }.check-list > div.success em { color: var(--green-dark); font-weight: 700; }
+.probe-title strong, .probe-title span { display: block; }
+.probe-title strong { font-size: 13px; }
+.probe-title span { color: var(--ink-soft); font-size: 12px; line-height: 1.4; }
+.modal { position: relative; }
+.check-list { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.45); }
+.check-list > div { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; min-height: 56px; padding: 10px 13px; border-bottom: 1px solid var(--border); }
+.check-list > div:last-child { border: 0; }
+.check-list i { width: 29px; height: 29px; display: grid; place-items: center; color: #95999a; border-radius: 9px; background: rgba(45,52,54,.05); }
+.check-list svg { width: 14px; }
+.check-list b, .check-list small { display: block; }
+.check-list b { font-size: 9px; }
+.check-list small { color: #999d9f; font-size: 7px; }
+.check-list em { color: #9a9ea0; font-size: 8px; font-style: normal; }
+.check-list > div.checking i { color: var(--indigo); background: rgba(61,90,128,.09); }
+.check-list > div.checking svg { animation: spin 1s linear infinite; }
+.check-list > div.success i { color: #fff; background: var(--green); }
+.check-list > div.success em { color: var(--green-dark); font-weight: 700; }
+.check-list > div.failed i { color: #fff; background: var(--danger); }
+.check-list > div.failed em { color: var(--danger); font-weight: 700; }
+.check-list > div.failed small { color: var(--terra-dark); }
+
+.probe-error {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  color: var(--danger);
+  border: 1px solid rgba(181,82,74,.22);
+  border-radius: 12px;
+  background: rgba(181,82,74,.08);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .preview-device { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 14px; border: 1px solid rgba(122,158,126,.18); border-radius: 14px; background: rgba(122,158,126,.07); }.preview-icon { width: 42px; height: 42px; display: grid; place-items: center; color: var(--indigo); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }.preview-icon svg { width: 20px; }.preview-device p { margin: 0; color: var(--ink-soft); font-size: 7px; }.preview-device h4 { margin: 1px 0; font-size: 12px; }.preview-device div > span { color: var(--ink-soft); font-size: 8px; }.preview-status { display: flex; align-items: center; gap: 5px; color: var(--green-dark); font-size: 7px; font-weight: 800; }.preview-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 .preview-list { margin: 14px 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }.preview-list > div { display: grid; grid-template-columns: 145px 1fr; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--border); }.preview-list > div:last-child { border: 0; }.preview-list dt { color: var(--ink-soft); font-size: 8px; }.preview-list dd { margin: 0; font-size: 8px; font-weight: 600; }.template-chip { display: inline-block; padding: 3px 6px; color: var(--indigo); border-radius: 6px; background: rgba(91,123,154,.09); }
 .confirm-check { display: flex; gap: 9px; align-items: center; cursor: pointer; }.confirm-check > input { position: absolute; opacity: 0; }.confirm-check > span:nth-child(2) { width: 21px; height: 21px; display: grid; place-items: center; color: #fff; border: 1px solid var(--border); border-radius: 7px; background: #fff; }.confirm-check input:checked + span { border-color: var(--indigo); background: var(--indigo); }.confirm-check svg { width: 13px; }.confirm-check b, .confirm-check small { display: block; }.confirm-check b { font-size: 9px; }.confirm-check small { color: var(--ink-soft); font-size: 7px; }
@@ -366,7 +397,37 @@ dialog::backdrop { background: rgba(35,42,45,.37); backdrop-filter: blur(8px); a
 
 .settings-modal { width: min(730px,calc(100vw - 30px)); }.settings-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 11px; padding: 20px; }.settings-grid > button { min-height: 92px; display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 13px; color: inherit; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.62); text-align: left; cursor: pointer; transition: .2s; }.settings-grid > button:hover { transform: translateY(-2px); border-color: rgba(91,123,154,.2); box-shadow: var(--shadow); }.setting-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; }.setting-icon svg { width: 17px; }.setting-icon.indigo { color: var(--indigo); background: rgba(61,90,128,.1); }.setting-icon.green { color: var(--green-dark); background: rgba(122,158,126,.12); }.setting-icon.terra { color: var(--terra-dark); background: rgba(193,122,108,.12); }.setting-icon.blue { color: var(--indigo-2); background: rgba(138,166,192,.14); }.settings-grid b, .settings-grid small { display: block; }.settings-grid b { font-size: 9px; }.settings-grid small { margin-top: 3px; color: var(--ink-soft); font-size: 7px; }.settings-grid em { min-width: 22px; padding: 3px 5px; color: var(--ink-soft); border-radius: 6px; background: rgba(45,52,54,.05); font-size: 7px; font-style: normal; font-weight: 700; text-align: center; }.settings-grid em.setting-ok { color: var(--green-dark); background: rgba(122,158,126,.1); }.settings-grid .arrow { width: 14px; color: #9ca0a2; }.settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--border); background: rgba(255,255,255,.38); }.settings-footer > span { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: 8px; }.settings-footer > span svg { width: 15px; color: var(--green-dark); }
 
-.toast { max-width: min(380px,calc(100vw - 30px)); position: fixed; right: 20px; bottom: 20px; z-index: 100; display: flex; align-items: center; gap: 10px; padding: 12px 16px 12px 12px; border: 1px solid var(--border); border-radius: 13px; background: rgba(255,255,255,.94); box-shadow: var(--shadow-lg); backdrop-filter: blur(12px); opacity: 0; transform: translateY(18px); pointer-events: none; transition: .25s; }.toast.show { opacity: 1; transform: none; }.toast > span { width: 29px; height: 29px; display: grid; place-items: center; flex: 0 0 auto; color: #fff; border-radius: 9px; background: var(--green); }.toast svg { width: 15px; }.toast p { margin: 0; font-size: 9px; font-weight: 700; }
+.toast {
+  max-width: min(380px, calc(100vw - 30px));
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: rgba(255,255,255,.94);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  transform: translateY(18px);
+  pointer-events: none;
+  transition: .25s;
+}
+dialog[open] > .toast {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+}
+.toast.show { opacity: 1; transform: none; }
+.toast > span { width: 29px; height: 29px; display: grid; place-items: center; flex: 0 0 auto; color: #fff; border-radius: 9px; background: var(--green); }
+.toast.toast-error > span { background: var(--danger); }
+.toast svg { width: 15px; }
+.toast p { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.35; }
 
 @keyframes breathe { 50% { opacity: .45; } }
 @keyframes chartPulse { 50% { r: 16px; opacity: 0; } }

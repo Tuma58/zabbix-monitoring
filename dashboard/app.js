@@ -34,11 +34,58 @@
     return `<svg><use href="#${id}"/></svg>`;
   }
 
-  function showToast(message) {
+  function showToast(message, variant = 'ok') {
     $('p', toast).textContent = message;
+    toast.classList.toggle('toast-error', variant === 'error');
+    const iconWrap = $('span', toast);
+    if (iconWrap) {
+      iconWrap.innerHTML = variant === 'error' ? icon('i-alert') : icon('i-check');
+    }
+    // Native <dialog showModal()> uses the top layer; toast must live inside an open dialog to be visible.
+    const openModal = document.querySelector('dialog[open]');
+    if (openModal && toast.parentElement !== openModal) openModal.appendChild(toast);
+    else if (!openModal && toast.parentElement !== document.body) document.body.appendChild(toast);
     toast.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 4200);
+  }
+
+  function setProbeChecks(state, details = []) {
+    const checks = $$('.check-list > div');
+    checks.forEach((item, index) => {
+      const detail = details[index];
+      if (state === 'checking') {
+        item.className = 'checking';
+        $('i', item).innerHTML = icon('i-refresh');
+        $('small', item).textContent = 'Проверяем…';
+        $('em', item).textContent = '…';
+        return;
+      }
+      if (state === 'failed') {
+        item.className = 'failed';
+        $('i', item).innerHTML = icon('i-alert');
+        $('small', item).textContent = detail?.[0] || 'Проверка не выполнена';
+        $('em', item).textContent = detail?.[1] || 'Ошибка';
+        return;
+      }
+      if (state === 'success') {
+        item.className = 'success';
+        $('i', item).innerHTML = icon('i-check');
+        $('small', item).textContent = detail?.[0] || 'Успешно';
+        $('em', item).textContent = detail?.[1] || 'OK';
+      }
+    });
+  }
+
+  function resolveWizardSiteId() {
+    const selected = $('#deviceSite')?.value || '';
+    if (selected && selected !== '__new__') {
+      const byName = sitesCache.find((item) => item.name === selected);
+      if (byName) return byName.id;
+      const byId = sitesCache.find((item) => item.id === selected);
+      if (byId) return byId.id;
+    }
+    return sitesCache[0]?.id || '';
   }
 
   function openDialog(dialog) {
@@ -592,6 +639,7 @@
       $('em', item).textContent = '—';
     });
     $$('.field input, .field select', form).forEach((field) => field.classList.remove('invalid'));
+    $('#probeError')?.setAttribute('hidden', '');
     applySuggestedProtocol($('#deviceType')?.value || '');
     updateConnectionGuide();
     populateCredentialProfiles();
@@ -689,86 +737,151 @@
 
   async function runProbe() {
     const runId = ++probeRunId;
-    const checks = $$('.check-list > div');
+    const address = ($('#deviceAddress')?.value || '').trim();
     probeComplete = false;
     nextButton.disabled = true;
     $('#runProbe').disabled = true;
     $('#runProbe').innerHTML = `${icon('i-refresh')}Проверяем…`;
-    $('#probeTitle').textContent = `Проверяем ${$('#deviceAddress').value || 'устройство'}`;
-    $('#probeSubtitle').textContent = 'Запрос выполняется через proxy выбранной площадки';
-    $('.probe-animation').classList.add('running');
+    $('#probeTitle').textContent = `Проверяем ${address || 'устройство'}`;
+    $('#probeSubtitle').textContent = 'Запрос выполняется через API портала';
+    $('#probeError')?.setAttribute('hidden', '');
+    $('.probe-animation')?.classList.add('running');
+    setProbeChecks('checking');
 
-    checks.forEach((item) => {
-      item.className = '';
-      $('i', item).innerHTML = icon('i-clock');
-      $('small', item).textContent = 'Ожидает проверки';
-      $('em', item).textContent = '—';
-    });
-
-    if (accessToken && apiOnline) {
-      try {
-        let siteId = sitesCache[0]?.id;
-        if (!siteId) {
-          const sites = await api('/sites');
-          sitesCache = sites;
-          siteId = sites[0]?.id;
-        }
-        if (!siteId) {
-          const created = await api('/sites', {
-            method: 'POST',
-            body: { name: $('#deviceSite').value || 'Default', timezone: 'Europe/Moscow', tags: [] },
-          });
-          siteId = created.id;
-          sitesCache = [created];
-        }
-        const operation = await api('/devices/probe', {
-          method: 'POST',
-          headers: { 'Idempotency-Key': `probe-${$('#deviceAddress').value}-${Date.now()}` },
-          body: {
-            site_id: siteId,
-            address: $('#deviceAddress').value,
-            device_type: $('#deviceType').value || 'router',
-            protocol: $('input[name="protocol"]:checked').value,
-          },
-        });
-        if (runId !== probeRunId) return;
-        const result = operation.result || {};
-        const labels = [
-          [result.icmp?.ok ? `Ответ получен за ${result.icmp.latency_ms || '—'} мс` : 'ICMP недоступен', result.icmp?.ok ? `${result.icmp.latency_ms || '—'} мс` : 'Ошибка'],
-          [result.protocol?.ok ? `${result.protocol.version || 'protocol'} доступен` : 'Протокол недоступен', result.protocol?.ok ? 'Доступен' : 'Ошибка'],
-          ['Профиль принят устройством', 'Успешно'],
-          [`${result.identity?.vendor || 'Unknown'} ${result.identity?.model || ''}`.trim(), 'Определено'],
-        ];
-        labels.forEach((label, index) => {
-          const item = checks[index];
-          item.className = 'success';
-          $('i', item).innerHTML = icon('i-check');
-          $('small', item).textContent = label[0];
-          $('em', item).textContent = label[1];
-        });
-        probeComplete = true;
-        nextButton.disabled = false;
-        $('#runProbe').disabled = false;
-        $('#runProbe').innerHTML = `${icon('i-refresh')}Проверить ещё раз`;
-        $('#probeTitle').textContent = 'Подключение работает';
-        $('#probeSubtitle').textContent = 'Устройство определено, настройки мониторинга подобраны';
-        $('.probe-animation').classList.remove('running');
-        showToast('Проверка через API завершена');
-        return;
-      } catch (error) {
-        showToast(error.message || 'Проверка не удалась');
-      }
-    } else {
-      showToast('API недоступен — проверка невозможна');
+    if (!address) {
+      finishProbeFailure(runId, 'Укажите IP-адрес или FQDN устройства', [
+        ['Адрес не задан', 'Ошибка'],
+        ['Протокол не проверялся', '—'],
+        ['Авторизация не проверялась', '—'],
+        ['Модель не определена', '—'],
+      ]);
+      return;
     }
 
+    if (!accessToken || !apiOnline) {
+      finishProbeFailure(runId, 'Нет сессии API. Войдите в систему и повторите проверку.', [
+        ['API недоступен или нет сессии', 'Ошибка'],
+        ['Протокол не проверялся', '—'],
+        ['Авторизация не проверялась', '—'],
+        ['Модель не определена', '—'],
+      ]);
+      return;
+    }
+
+    try {
+      let siteId = resolveWizardSiteId();
+      if (!siteId) {
+        const sites = await api('/sites');
+        sitesCache = sites;
+        siteId = resolveWizardSiteId() || sites[0]?.id;
+      }
+      if (!siteId) {
+        const siteName = ($('#deviceSite')?.value && $('#deviceSite').value !== '__new__')
+          ? $('#deviceSite').value
+          : 'Основная';
+        const created = await api('/sites', {
+          method: 'POST',
+          body: { name: siteName, timezone: 'Europe/Moscow', tags: [] },
+        });
+        siteId = created.id;
+        sitesCache = [created, ...sitesCache.filter((item) => item.id !== created.id)];
+        populateWizardSites(sitesCache);
+      }
+
+      const operation = await api('/devices/probe', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': `probe-${address}-${Date.now()}` },
+        body: {
+          site_id: siteId,
+          address,
+          device_type: $('#deviceType').value || 'router',
+          protocol: $('input[name="protocol"]:checked')?.value || 'SNMPv3',
+          credential_profile_id: selectedCredentialProfileId || $('#credentialProfile')?.value || null,
+        },
+      });
+      if (runId !== probeRunId) return;
+
+      const result = operation.result || {};
+      const failed = result.icmp?.ok === false || result.protocol?.ok === false;
+      const labels = [
+        [
+          result.icmp?.ok
+            ? `Ответ получен за ${result.icmp.latency_ms ?? '—'} мс`
+            : (result.icmp?.error || 'ICMP недоступен'),
+          result.icmp?.ok ? `${result.icmp.latency_ms ?? '—'} мс` : 'Ошибка',
+        ],
+        [
+          result.protocol?.ok
+            ? `${result.protocol.version || 'protocol'} доступен`
+            : (result.protocol?.error || 'Протокол недоступен'),
+          result.protocol?.ok ? 'Доступен' : 'Ошибка',
+        ],
+        [
+          result.auth?.ok === false
+            ? (result.auth?.error || 'Авторизация не прошла')
+            : 'Профиль принят устройством',
+          result.auth?.ok === false ? 'Ошибка' : 'Успешно',
+        ],
+        [
+          `${result.identity?.vendor || 'Unknown'} ${result.identity?.model || ''}`.trim(),
+          result.identity ? 'Определено' : '—',
+        ],
+      ];
+
+      if (failed) {
+        finishProbeFailure(
+          runId,
+          result.warnings?.[0] || 'Устройство не ответило на проверку. Проверьте адрес, firewall и протокол.',
+          labels.map((label, index) => {
+            if (index === 0 && result.icmp?.ok === false) return label;
+            if (index === 1 && result.protocol?.ok === false) return label;
+            return label;
+          }),
+        );
+        return;
+      }
+
+      setProbeChecks('success', labels);
+      probeComplete = true;
+      nextButton.disabled = false;
+      $('#runProbe').disabled = false;
+      $('#runProbe').innerHTML = `${icon('i-refresh')}Проверить ещё раз`;
+      $('#probeTitle').textContent = 'Подключение работает';
+      $('#probeSubtitle').textContent = 'Устройство определено, настройки мониторинга подобраны';
+      $('#probeError')?.setAttribute('hidden', '');
+      $('.probe-animation')?.classList.remove('running');
+      showToast('Проверка через API завершена');
+    } catch (error) {
+      const message = error?.payload?.message || error.message || 'Проверка не удалась';
+      const details = error?.payload?.details;
+      const detailText = details?.address
+        ? `${message} (адрес: ${details.address})`
+        : message;
+      finishProbeFailure(runId, detailText, [
+        [detailText, 'Ошибка'],
+        ['Протокол не проверялся', '—'],
+        ['Авторизация не проверялась', '—'],
+        ['Модель не определена', '—'],
+      ]);
+    }
+  }
+
+  function finishProbeFailure(runId, message, labels) {
+    if (runId !== probeRunId) return;
     probeComplete = false;
     nextButton.disabled = true;
     $('#runProbe').disabled = false;
     $('#runProbe').innerHTML = `${icon('i-refresh')}Проверить подключение`;
     $('#probeTitle').textContent = 'Проверка не выполнена';
-    $('#probeSubtitle').textContent = 'Подключитесь к API и повторите';
-    $('.probe-animation').classList.remove('running');
+    $('#probeSubtitle').textContent = message;
+    const errorNode = $('#probeError');
+    if (errorNode) {
+      errorNode.hidden = false;
+      errorNode.textContent = message;
+    }
+    setProbeChecks('failed', labels);
+    $('.probe-animation')?.classList.remove('running');
+    showToast(message, 'error');
   }
 
   async function addDevice() {

@@ -108,14 +108,6 @@ async def create_device(
     return _device_out(device, provision_result)
 
 
-@router.get("/{device_id}", response_model=DeviceOut)
-def get_device(device_id: str, _: ViewerUser, db: DbSession) -> DeviceOut:
-    device = db.get(Device, device_id)
-    if device is None:
-        raise not_found("Device not found")
-    return _device_out(device)
-
-
 @router.post("/probe", response_model=OperationOut, status_code=202)
 def probe_device(
     payload: ProbeRequest,
@@ -184,3 +176,11 @@ def probe_device(
         result=result,
         links={"self": f"/api/v1/operations/{operation.id}"},
     )
+
+
+@router.get("/{device_id}", response_model=DeviceOut)
+def get_device(device_id: str, _: ViewerUser, db: DbSession) -> DeviceOut:
+    device = db.get(Device, device_id)
+    if device is None:
+        raise not_found("Device not found")
+    return _device_out(device)
