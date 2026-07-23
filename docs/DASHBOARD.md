@@ -108,8 +108,8 @@ sudo /opt/netmon/scripts/diagnose-monitoring.sh
 3. Отредактируйте `C:\Program Files\Zabbix Agent 2\zabbix_agent2.conf`:
 
 ```ini
-Server=94.181.181.43
-ServerActive=94.181.181.43
+Server=100.10.10.66,94.181.181.43
+ServerActive=100.10.10.66
 Hostname=win-srv-01
 ```
 
