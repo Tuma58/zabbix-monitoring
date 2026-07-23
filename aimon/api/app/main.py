@@ -187,16 +187,37 @@ async def update_host(name: str, payload: HostUpdateIn) -> dict[str, Any]:
     community = _community_for(payload.snmp_profile_id)
     current = name
     try:
+        existing = await cmk.get_host(current)
+        if not existing:
+            raise HTTPException(404, f"Host not found: {current}")
+
+        # Only send attribute updates when values actually change.
+        address = payload.address
+        alias = payload.alias
+        host_type = payload.type
+        if address is not None and address == (existing.get("address") or ""):
+            address = None
+        if alias is not None and alias == (existing.get("alias") or ""):
+            alias = None
+        if host_type is not None and host_type == (existing.get("type") or "agent"):
+            # Keep type only if SNMP community is being set; otherwise skip no-op tag rewrite.
+            if not (host_type == "snmp" and community):
+                host_type = None
+
         result = await cmk.update_host(
             current,
-            address=payload.address,
-            alias=payload.alias,
+            address=address,
+            alias=alias,
             snmp_community=community if payload.type == "snmp" else None,
-            host_type=payload.type,
+            host_type=host_type,
         )
-        if payload.folder is not None:
-            await cmk.move_host(current, payload.folder or "/")
-            result["folder"] = payload.folder or "/"
+
+        target_folder = payload.folder
+        if target_folder is not None:
+            current_folder = existing.get("folder") or "/"
+            if (target_folder or "/") != current_folder:
+                await cmk.move_host(current, target_folder or "/")
+            result["folder"] = target_folder or "/"
 
         # Checkmk forbids rename while pending changes exist — activate first.
         await cmk.activate_changes()
@@ -212,6 +233,8 @@ async def update_host(name: str, payload: HostUpdateIn) -> dict[str, Any]:
 
         result["host"] = current
         return result
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except httpx.HTTPError as exc:

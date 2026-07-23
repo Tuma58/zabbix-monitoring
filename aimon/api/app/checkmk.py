@@ -339,13 +339,16 @@ class CheckmkClient:
             json={"target_folder": folder},
             headers={"If-Match": "*"},
         )
+        # Already in target folder is not an error for our edit form.
+        if resp.status_code == 400 and "already part" in resp.text.lower():
+            return {"host": name, "folder": folder, "moved": False}
         if resp.status_code >= 400:
             raise httpx.HTTPStatusError(
                 f"{resp.status_code} move host: {resp.text[:500]}",
                 request=resp.request,
                 response=resp,
             )
-        return {"host": name, "folder": folder}
+        return {"host": name, "folder": folder, "moved": True}
 
     async def delete_host(self, name: str) -> None:
         resp = await self._request("DELETE", f"/objects/host_config/{quote(name, safe='')}")
