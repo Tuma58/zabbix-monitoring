@@ -1,4 +1,6 @@
+certs/
+.env
+.admin-credentials
 __pycache__/
 *.pyc
-.env
 data/
