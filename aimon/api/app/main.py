@@ -8,6 +8,7 @@ from fastapi import Body, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.ai_assistant import AIAssistant
 from app.checkmk import CheckmkClient
 from app.config import get_settings
 from app.scan import cidr_is_allowed, guess_vendor, scan_snmp
@@ -26,6 +27,7 @@ app.add_middleware(
 store = JsonStore(settings.data_dir)
 box = SecretBox(settings.secrets_master_key)
 cmk = CheckmkClient(settings)
+assistant = AIAssistant(settings, cmk)
 
 P = settings.api_prefix
 
@@ -213,31 +215,12 @@ async def delete_secret(secret_id: str) -> Response:
     return Response(status_code=204)
 
 
-# ---------- AI assistant (DeepSeek) ----------
+# ---------- AI assistant (DeepSeek + tools) ----------
 @app.post(f"{P}/ai/chat")
 async def ai_chat(payload: ChatIn = Body(...)) -> dict[str, Any]:
     if not settings.deepseek_api_key:
         raise HTTPException(404, "AI service is not configured")
-    system = (
-        "You are AIMon, an assistant for a Checkmk-based monitoring system. "
-        "Answer concisely in Russian. Only use facts provided; never invent metrics."
-    )
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{settings.deepseek_base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
-                json={
-                    "model": settings.deepseek_model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": payload.message},
-                    ],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            reply = data["choices"][0]["message"]["content"]
+        return await assistant.chat(payload.message)
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"DeepSeek error: {exc}") from exc
-    return {"reply": reply, "action": None}

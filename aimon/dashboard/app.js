@@ -223,7 +223,20 @@
     try {
       const res = await api('/ai/chat', { method: 'POST', body: { message: text } });
       typing.textContent = res.reply || 'Готово.';
-      if (res.action) refresh();
+      const actions = Array.isArray(res.actions) ? res.actions : (res.action ? [res.action] : []);
+      const mutated = actions.some((a) =>
+        a && (a.tool === 'add_host' || a.tool === 'add_hosts_from_scan') && a.result && a.result.ok
+      );
+      if (mutated) {
+        const added = actions
+          .filter((a) => a.tool === 'add_host' && a.result?.ok)
+          .map((a) => a.result.host)
+          .concat(...actions.filter((a) => a.tool === 'add_hosts_from_scan' && a.result?.ok).map((a) => a.result.added || []));
+        if (added.length) toast(`AI добавил: ${added.join(', ')}`);
+        refresh();
+      } else if (res.action || actions.length) {
+        refresh();
+      }
     } catch (e2) {
       typing.textContent = e2.status === 404
         ? 'AI-сервис ещё не подключён. Скоро здесь появятся ответы DeepSeek.'
