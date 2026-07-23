@@ -117,6 +117,7 @@ class CheckmkClient:
             "POST",
             "/domain-types/activation_run/actions/activate-changes/invoke",
             json=body,
+            headers={"If-Match": "*"},
         )
         if resp.status_code not in (200, 302, 422):
             detail = resp.text[:500]
