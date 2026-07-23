@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     checkmk_site: str = "cmk"
     checkmk_user: str = "automation"
     checkmk_secret: str = ""
-    checkmk_timeout: float = 15.0
+    checkmk_timeout: float = 60.0
 
     # Secrets envelope key (Fernet). Generate a stable value in production.
     secrets_master_key: str = "change-me-32-byte-master-key!!!!"

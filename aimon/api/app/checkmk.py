@@ -29,8 +29,12 @@ class CheckmkClient:
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         url = f"{self._base}{path}"
+        headers = {**self._headers, "Content-Type": "application/json"}
+        extra_headers = kwargs.pop("headers", None)
+        if extra_headers:
+            headers.update(extra_headers)
         async with httpx.AsyncClient(timeout=self._s.checkmk_timeout, verify=False) as client:
-            return await client.request(method, url, headers=self._headers, **kwargs)
+            return await client.request(method, url, headers=headers, **kwargs)
 
     async def version(self) -> dict[str, Any]:
         resp = await self._request("GET", "/version")
@@ -79,7 +83,15 @@ class CheckmkClient:
             "/domain-types/host_config/collections/all",
             json=body,
         )
-        resp.raise_for_status()
+        if resp.status_code == 400 and "already exists" in resp.text.lower():
+            return {"id": name, "exists": True}
+        if resp.status_code >= 400:
+            detail = resp.text[:500]
+            raise httpx.HTTPStatusError(
+                f"{resp.status_code} creating host {name}: {detail}",
+                request=resp.request,
+                response=resp,
+            )
         return resp.json()
 
     async def delete_host(self, name: str) -> None:
@@ -88,33 +100,42 @@ class CheckmkClient:
             resp.raise_for_status()
 
     async def discover_services(self, name: str) -> dict[str, Any]:
-        body = {"host_name": name, "mode": "tabula_rasa"}
+        body = {"host_name": name, "mode": "refresh"}
         resp = await self._request(
             "POST",
             "/domain-types/service_discovery_run/actions/start/invoke",
             json=body,
         )
-        if resp.status_code not in (200, 302):
+        # discovery may be async / conflict while running — not fatal for add flow
+        if resp.status_code not in (200, 204, 302, 409, 422):
             resp.raise_for_status()
         return {"status": resp.status_code}
 
     async def activate_changes(self) -> dict[str, Any]:
-        body = {"redirect": False, "force_foreign_changes": True}
+        body = {"redirect": False, "sites": [self._s.checkmk_site], "force_foreign_changes": True}
         resp = await self._request(
             "POST",
             "/domain-types/activation_run/actions/activate-changes/invoke",
             json=body,
-            headers={**self._headers, "Content-Type": "application/json"},
         )
         if resp.status_code not in (200, 302, 422):
-            resp.raise_for_status()
+            detail = resp.text[:500]
+            raise httpx.HTTPStatusError(
+                f"{resp.status_code} activate: {detail}",
+                request=resp.request,
+                response=resp,
+            )
         return {"status": resp.status_code}
 
     async def register_and_activate(
         self, name: str, address: str, *, snmp_community: str | None = None
     ) -> dict[str, Any]:
         """Create host → discover services → activate changes (auto-add flow)."""
-        await self.create_host(name, address, snmp_community=snmp_community)
-        await self.discover_services(name)
+        created = await self.create_host(name, address, snmp_community=snmp_community)
+        try:
+            await self.discover_services(name)
+        except httpx.HTTPError:
+            # Agent may be offline; host is still registered.
+            pass
         await self.activate_changes()
-        return {"host": name, "activated": True}
+        return {"host": name, "activated": True, "exists": bool(created.get("exists"))}
