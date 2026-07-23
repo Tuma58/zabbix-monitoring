@@ -41,9 +41,16 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       DATA_DIR: /data
+      CONFIG_ROOT: /data/configs
+      CHAT_TTL_SECONDS: ${CHAT_TTL_SECONDS:-3600}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.66:7081,https://100.10.10.66:7444,http://94.181.181.43:7081,https://94.181.181.43:7444}
     volumes:
       - api-data:/data
+      # Конфиги для анализа/правки ассистентом (те же файлы, что у edge/dashboard)
+      - ./edge/nginx.conf:/data/configs/edge-nginx.conf
+      - ./nginx.conf:/data/configs/dashboard-nginx.conf
+      - ./compose.yaml:/data/configs/compose.yaml:ro
+      - ./configs:/data/configs/custom
     depends_on:
       - checkmk
     expose:

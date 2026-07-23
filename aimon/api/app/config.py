@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
 
+    # AI dialog memory
+    chat_ttl_seconds: int = 3600
+
+    # Managed config files root (mounted / shared with host configs)
+    config_root: str = "/data/configs"
+
     cors_origins: str = "*"
 
     @property

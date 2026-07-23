@@ -185,13 +185,20 @@
 
         <!-- Assistant -->
         <section class="view" data-view="assistant">
-          <div class="page-head"><div><p class="eyebrow">DeepSeek</p><h1>AI-ассистент</h1><p class="lead">Управляйте мониторингом на естественном языке.</p></div></div>
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">DeepSeek</p>
+              <h1>AI-ассистент</h1>
+              <p class="lead">Память диалога — 1 час. Может проверять связь и править конфиги AIMon.</p>
+            </div>
+            <button class="btn ghost" type="button" id="clearChat" title="Очистить память диалога">Очистить память</button>
+          </div>
           <div class="assistant">
             <div class="ai-hero">
               <div class="ai-orb big" id="aiOrb"><span></span><span></span><span></span><i><svg><use href="#i-spark"/></svg></i></div>
             </div>
             <div class="chat" id="chat">
-              <div class="msg bot"><div class="bubble">Здравствуйте! Я помогу добавить узлы, объяснить проблемы и ответить по телеметрии. Напишите, например: «просканируй 10.0.0.0/24».</div></div>
+              <div class="msg bot"><div class="bubble">Здравствуйте! Могу добавить узлы, проверить ping/порт/SNMP, разобрать и поправить конфиги. Например: «проверь 10.0.0.1», «покажи edge-nginx.conf», «добавь сервер 10.0.0.5».</div></div>
             </div>
             <form class="chat-bar" id="chatForm">
               <input id="chatInput" placeholder="Спросите ассистента…" autocomplete="off">

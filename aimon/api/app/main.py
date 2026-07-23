@@ -27,7 +27,7 @@ app.add_middleware(
 store = JsonStore(settings.data_dir)
 box = SecretBox(settings.secrets_master_key)
 cmk = CheckmkClient(settings)
-assistant = AIAssistant(settings, cmk)
+assistant = AIAssistant(settings, cmk, store)
 
 P = settings.api_prefix
 
@@ -65,7 +65,7 @@ class ScanAddIn(BaseModel):
 
 class ChatIn(BaseModel):
     message: str
-
+    session_id: str = "default"
 
 # ---------- helpers ----------
 def _community_for(profile_id: str | None) -> str | None:
@@ -215,12 +215,26 @@ async def delete_secret(secret_id: str) -> Response:
     return Response(status_code=204)
 
 
-# ---------- AI assistant (DeepSeek + tools) ----------
+# ---------- AI assistant (DeepSeek + tools + memory) ----------
 @app.post(f"{P}/ai/chat")
 async def ai_chat(payload: ChatIn = Body(...)) -> dict[str, Any]:
     if not settings.deepseek_api_key:
         raise HTTPException(404, "AI service is not configured")
     try:
-        return await assistant.chat(payload.message)
+        return await assistant.chat(payload.message, session_id=payload.session_id or "default")
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"DeepSeek error: {exc}") from exc
+
+
+@app.get(f"{P}/ai/history")
+async def ai_history(session_id: str = "default") -> dict[str, Any]:
+    if not settings.deepseek_api_key:
+        raise HTTPException(404, "AI service is not configured")
+    msgs = assistant.history(session_id)
+    return {"session_id": session_id, "ttl_seconds": settings.chat_ttl_seconds, "messages": msgs}
+
+
+@app.delete(f"{P}/ai/history", status_code=204, response_class=Response)
+async def ai_history_clear(session_id: str = "default") -> Response:
+    assistant.clear_history(session_id)
+    return Response(status_code=204)

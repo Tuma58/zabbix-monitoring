@@ -20,14 +20,20 @@ class JsonStore:
         os.makedirs(data_dir, exist_ok=True)
         self._path = os.path.join(data_dir, "store.json")
         if not os.path.exists(self._path):
-            self._write({"secrets": [], "scans": []})
+            self._write({"secrets": [], "scans": [], "chats": {}})
+        # ensure chats key exists on older stores
+        with self._lock:
+            data = self._read()
+            if "chats" not in data:
+                data["chats"] = {}
+                self._write(data)
 
     def _read(self) -> dict[str, Any]:
         try:
             with open(self._path, encoding="utf-8") as fh:
                 return json.load(fh)
         except (FileNotFoundError, json.JSONDecodeError):
-            return {"secrets": [], "scans": []}
+            return {"secrets": [], "scans": [], "chats": {}}
 
     def _write(self, data: dict[str, Any]) -> None:
         tmp = self._path + ".tmp"
@@ -71,3 +77,57 @@ class JsonStore:
             data["secrets"] = [s for s in data.get("secrets", []) if s["id"] != secret_id]
             self._write(data)
             return len(data["secrets"]) < before
+
+    # chat memory (1 hour rolling window) --------------------------------
+    def append_chat(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        *,
+        ttl_seconds: int = 3600,
+        meta: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        sid = (session_id or "").strip() or "default"
+        now = datetime.now(timezone.utc)
+        cutoff = now.timestamp() - ttl_seconds
+        entry: dict[str, Any] = {
+            "role": role,
+            "content": content,
+            "ts": now.isoformat(),
+            "epoch": now.timestamp(),
+        }
+        if meta:
+            entry["meta"] = meta
+        with self._lock:
+            data = self._read()
+            chats = data.setdefault("chats", {})
+            msgs = [m for m in chats.get(sid, []) if float(m.get("epoch", 0)) >= cutoff]
+            msgs.append(entry)
+            chats[sid] = msgs[-80:]
+            stale = [k for k, v in chats.items() if not v or float(v[-1].get("epoch", 0)) < cutoff]
+            for k in stale:
+                chats.pop(k, None)
+            self._write(data)
+            return list(chats[sid])
+
+    def get_chat(self, session_id: str, *, ttl_seconds: int = 3600) -> list[dict[str, Any]]:
+        sid = (session_id or "").strip() or "default"
+        cutoff = datetime.now(timezone.utc).timestamp() - ttl_seconds
+        with self._lock:
+            data = self._read()
+            return [
+                m
+                for m in data.get("chats", {}).get(sid, [])
+                if float(m.get("epoch", 0)) >= cutoff
+            ]
+
+    def clear_chat(self, session_id: str) -> bool:
+        sid = (session_id or "").strip() or "default"
+        with self._lock:
+            data = self._read()
+            chats = data.setdefault("chats", {})
+            existed = sid in chats
+            chats.pop(sid, None)
+            self._write(data)
+            return existed

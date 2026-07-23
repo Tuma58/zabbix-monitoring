@@ -212,6 +212,43 @@
   });
 
   /* ---------- Assistant ---------- */
+  function sessionId() {
+    const key = 'aimon_chat_session';
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = (crypto.randomUUID && crypto.randomUUID()) || `s-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  }
+
+  function resetChatWelcome() {
+    const chat = $('#chat');
+    chat.innerHTML = '';
+    addMsg('Память очищена. Могу снова добавить узлы, проверить связь или разобрать конфиги.', 'bot');
+  }
+
+  async function loadChatHistory() {
+    try {
+      const res = await api(`/ai/history?session_id=${encodeURIComponent(sessionId())}`);
+      const msgs = res.messages || [];
+      if (!msgs.length) return;
+      const chat = $('#chat');
+      chat.innerHTML = '';
+      msgs.forEach((m) => addMsg(m.content || '', m.role === 'user' ? 'user' : 'bot'));
+    } catch (_) { /* AI optional */ }
+  }
+
+  $('#clearChat')?.addEventListener('click', async () => {
+    try {
+      await api(`/ai/history?session_id=${encodeURIComponent(sessionId())}`, { method: 'DELETE' });
+      resetChatWelcome();
+      toast('Память диалога очищена');
+    } catch (e) {
+      toast(e.message || 'Не удалось очистить', false);
+    }
+  });
+
   $('#chatForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = $('#chatInput');
@@ -221,11 +258,14 @@
     input.value = '';
     const typing = addMsg('…', 'bot');
     try {
-      const res = await api('/ai/chat', { method: 'POST', body: { message: text } });
+      const res = await api('/ai/chat', {
+        method: 'POST',
+        body: { message: text, session_id: sessionId() },
+      });
       typing.textContent = res.reply || 'Готово.';
       const actions = Array.isArray(res.actions) ? res.actions : (res.action ? [res.action] : []);
       const mutated = actions.some((a) =>
-        a && (a.tool === 'add_host' || a.tool === 'add_hosts_from_scan') && a.result && a.result.ok
+        a && ['add_host', 'add_hosts_from_scan', 'write_config', 'patch_config'].includes(a.tool) && a.result && a.result.ok
       );
       if (mutated) {
         const added = actions
@@ -233,6 +273,12 @@
           .map((a) => a.result.host)
           .concat(...actions.filter((a) => a.tool === 'add_hosts_from_scan' && a.result?.ok).map((a) => a.result.added || []));
         if (added.length) toast(`AI добавил: ${added.join(', ')}`);
+        const cfg = actions.find((a) => ['write_config', 'patch_config'].includes(a.tool) && a.result?.ok);
+        if (cfg?.result?.restart_hint?.length) {
+          toast(`Конфиг обновлён. Перезапустите: ${cfg.result.restart_hint.join(', ')}`);
+        } else if (cfg) {
+          toast(`Конфиг обновлён: ${cfg.result.path}`);
+        }
         refresh();
       } else if (res.action || actions.length) {
         refresh();
@@ -270,5 +316,6 @@
   const initial = location.hash.slice(1);
   if (initial) showView(initial);
   refresh();
+  loadChatHistory();
   setInterval(refresh, 30000);
 })();
