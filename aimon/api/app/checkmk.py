@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import quote
 
@@ -370,14 +371,33 @@ class CheckmkClient:
             json=body,
             headers={"If-Match": "*"},
         )
-        if resp.status_code not in (200, 302, 422):
+        if resp.status_code == 422:
+            return {"status": 422, "detail": "no changes"}
+        if resp.status_code not in (200, 302):
             detail = resp.text[:500]
             raise httpx.HTTPStatusError(
                 f"{resp.status_code} activate: {detail}",
                 request=resp.request,
                 response=resp,
             )
-        return {"status": resp.status_code}
+        # Activation is async — wait until pending changes are gone.
+        run_id = None
+        try:
+            run_id = resp.json().get("id")
+        except Exception:  # noqa: BLE001
+            run_id = None
+        if run_id:
+            wait_path = f"/objects/activation_run/{run_id}/actions/wait-for-completion/invoke"
+            try:
+                await self._request("GET", wait_path)
+            except Exception:  # noqa: BLE001
+                pass
+        for _ in range(40):
+            pend = await self._request("GET", "/domain-types/activation_run/collections/pending_changes")
+            if pend.status_code == 200 and not pend.json().get("value"):
+                break
+            await asyncio.sleep(0.5)
+        return {"status": resp.status_code, "id": run_id}
 
     async def register_and_activate(
         self,
