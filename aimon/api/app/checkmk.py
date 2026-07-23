@@ -55,7 +55,10 @@ class CheckmkClient:
         extra_headers = kwargs.pop("headers", None)
         if extra_headers:
             headers.update(extra_headers)
-        async with httpx.AsyncClient(timeout=self._s.checkmk_timeout, verify=False) as client:
+        # Do not follow redirects: rename returns 302 while the job runs.
+        async with httpx.AsyncClient(
+            timeout=self._s.checkmk_timeout, verify=False, follow_redirects=False
+        ) as client:
             return await client.request(method, url, headers=headers, **kwargs)
 
     async def version(self) -> dict[str, Any]:
@@ -300,13 +303,23 @@ class CheckmkClient:
             raise ValueError("new_name is required")
         if new_name == name:
             return {"host": name, "renamed": False}
+
+        # Rename requires a real ETag; If-Match: * is rejected by Checkmk.
+        current = await self.get_host(name)
+        if not current:
+            raise httpx.HTTPStatusError(
+                f"404 host not found for rename: {name}",
+                request=httpx.Request("GET", f"{self._base}/objects/host_config/{name}"),
+                response=httpx.Response(404),
+            )
+        etag = current.get("etag") or "*"
         resp = await self._request(
             "PUT",
             f"/objects/host_config/{quote(name, safe='')}/actions/rename/invoke",
             json={"new_name": new_name},
-            headers={"If-Match": "*"},
+            headers={"If-Match": etag},
         )
-        # Checkmk may return 200 or a redirect while the rename job runs
+        # 302/303 = rename job accepted / redirect to wait
         if resp.status_code in (200, 204, 302, 303):
             return {"host": new_name, "old_name": name, "renamed": True, "status": resp.status_code}
         if resp.status_code >= 400:
