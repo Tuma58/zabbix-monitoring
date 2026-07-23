@@ -197,13 +197,19 @@ async def update_host(name: str, payload: HostUpdateIn) -> dict[str, Any]:
         if payload.folder is not None:
             await cmk.move_host(current, payload.folder or "/")
             result["folder"] = payload.folder or "/"
+
+        # Checkmk forbids rename while pending changes exist — activate first.
+        await cmk.activate_changes()
+        result["activated"] = True
+
         new_name = (payload.new_name or "").strip()
         if new_name and new_name != current:
             renamed = await cmk.rename_host(current, new_name)
             result.update(renamed)
             current = new_name
-        await cmk.activate_changes()
-        result["activated"] = True
+            await cmk.activate_changes()
+            result["activated"] = True
+
         result["host"] = current
         return result
     except ValueError as exc:
