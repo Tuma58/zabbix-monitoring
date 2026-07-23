@@ -206,10 +206,11 @@ async def add_secret(payload: SecretIn) -> dict[str, Any]:
     return store.add_secret(payload.name, payload.kind, box.encrypt(payload.value))
 
 
-@app.delete(f"{P}/secrets/{{secret_id}}", status_code=204)
-async def delete_secret(secret_id: str) -> None:
+@app.delete(f"{P}/secrets/{{secret_id}}", status_code=204, response_class=Response)
+async def delete_secret(secret_id: str) -> Response:
     if not store.delete_secret(secret_id):
         raise HTTPException(404, "Secret not found")
+    return Response(status_code=204)
 
 
 # ---------- AI assistant (DeepSeek) ----------
