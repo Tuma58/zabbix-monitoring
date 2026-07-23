@@ -127,8 +127,8 @@ async def create_host(payload: HostIn) -> dict[str, Any]:
         raise HTTPException(502, f"Checkmk error: {exc}") from exc
 
 
-@app.delete(f"{P}/hosts/{{name}}", status_code=204)
-async def delete_host(name: str) -> None:
+@app.delete(f"{P}/hosts/{{name}}", status_code=204, response_class=Response)
+async def delete_host(name: str) -> Response:
     if not cmk.enabled:
         raise HTTPException(503, "Checkmk is not configured")
     try:
@@ -136,6 +136,7 @@ async def delete_host(name: str) -> None:
         await cmk.activate_changes()
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Checkmk error: {exc}") from exc
+    return Response(status_code=204)
 
 
 # ---------- agent auto-registration ----------

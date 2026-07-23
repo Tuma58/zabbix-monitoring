@@ -141,24 +141,44 @@ else
   ADMIN_PW="$(grep '^CHECKMK_ADMIN_PASSWORD=' .env | cut -d= -f2-)"
 fi
 
+prefer_ipv4_docker() {
+  # На части VPS AAAA есть, а IPv6 нет → docker pull падает.
+  sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
+  sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+  printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' >/etc/resolv.conf 2>/dev/null || true
+  grep -q 'precedence :ffff:0:0/96  100' /etc/gai.conf 2>/dev/null \
+    || echo 'precedence :ffff:0:0/96  100' >>/etc/gai.conf 2>/dev/null || true
+  if command -v dig >/dev/null 2>&1; then
+    sed -i -E '/[[:space:]](registry-1\.docker\.io|auth\.docker\.io|registry\.docker\.io)$/d' /etc/hosts 2>/dev/null || true
+    for host in registry-1.docker.io auth.docker.io registry.docker.io; do
+      ip="$(dig +short A "$host" @8.8.8.8 | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1 || true)"
+      [[ -n "$ip" ]] && echo "$ip $host" >>/etc/hosts
+    done
+  fi
+  mkdir -p /etc/docker
+  if [[ ! -f /etc/docker/daemon.json ]]; then
+    cat >/etc/docker/daemon.json <<'EOF'
+{"ipv6": false, "ip6tables": false, "dns": ["8.8.8.8", "1.1.1.1"]}
+EOF
+    systemctl restart docker 2>/dev/null || true
+    sleep 3
+  fi
+}
+
 # 5) Поднять стек (retry при DNS/registry сбоях)
 log "Starting stack…"
+prefer_ipv4_docker
 pull_ok=0
 for attempt in 1 2 3 4 5; do
-  if docker compose pull 2>&1; then
+  if docker compose pull --ignore-buildable 2>&1; then
     pull_ok=1
     break
   fi
   log "docker compose pull failed (attempt ${attempt}/5) — жду и повторяю…"
-  # иногда 1.1.1.1 отдаёт только AAAA; пробуем системный DNS
-  if [[ $attempt -eq 2 ]]; then
-    printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' >/etc/resolv.conf.tmp
-    cat /etc/resolv.conf >>/etc/resolv.conf.tmp 2>/dev/null || true
-    mv /etc/resolv.conf.tmp /etc/resolv.conf || true
-  fi
+  prefer_ipv4_docker
   sleep $((attempt * 8))
 done
-[[ "$pull_ok" -eq 1 ]] || { echo "Не удалось скачать образы" >&2; exit 1; }
+[[ "$pull_ok" -eq 1 ]] || log "WARNING: pull не удался — пробуем up с локальными/кэшированными образами"
 docker compose up -d --build
 
 # 6) Ждём Checkmk (первый старт долгий)
