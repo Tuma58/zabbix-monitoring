@@ -209,7 +209,7 @@
     $('#hostModalTitle').textContent = editing ? `Изменить «${editName}»` : 'Новый узел';
     $('#hostEditName').value = editName || '';
     $('#hostName').value = host?.name || '';
-    $('#hostName').disabled = editing;
+    $('#hostName').disabled = false;
     $('#hostAddress').value = host?.address || '';
     $('#hostAlias').value = host?.alias || '';
     $('#hostType').value = host?.type || 'agent';
@@ -217,7 +217,7 @@
     fillSnmpSelect($('#hostSnmpProfile'), '');
     toggleHostSnmp();
     hostModal?.showModal();
-    (editing ? $('#hostAddress') : $('#hostName'))?.focus();
+    $('#hostName')?.focus();
   }
 
   function toggleHostSnmp() {
@@ -244,17 +244,20 @@
     if (!body.name) { toast('Укажите имя узла', false); return; }
     try {
       if (editName) {
-        await api(`/hosts/${encodeURIComponent(editName)}`, {
+        const patch = {
+          address: body.address,
+          alias: body.alias,
+          type: body.type,
+          folder: body.folder,
+          snmp_profile_id: body.snmp_profile_id,
+        };
+        if (body.name && body.name !== editName) patch.new_name = body.name;
+        const res = await api(`/hosts/${encodeURIComponent(editName)}`, {
           method: 'PATCH',
-          body: {
-            address: body.address,
-            alias: body.alias,
-            type: body.type,
-            folder: body.folder,
-            snmp_profile_id: body.snmp_profile_id,
-          },
+          body: patch,
         });
-        toast(`Узел «${editName}» обновлён`);
+        const finalName = res?.host || body.name || editName;
+        toast(finalName !== editName ? `Узел переименован: «${editName}» → «${finalName}»` : `Узел «${finalName}» обновлён`);
       } else {
         await api('/hosts', { method: 'POST', body });
         toast(`Узел «${body.name}» добавлен`);

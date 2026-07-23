@@ -43,6 +43,7 @@ class HostIn(BaseModel):
 
 
 class HostUpdateIn(BaseModel):
+    new_name: str | None = None
     address: str | None = None
     type: str | None = None
     snmp_profile_id: str | None = None
@@ -184,20 +185,29 @@ async def update_host(name: str, payload: HostUpdateIn) -> dict[str, Any]:
     if not cmk.enabled:
         raise HTTPException(503, "Checkmk is not configured")
     community = _community_for(payload.snmp_profile_id)
+    current = name
     try:
         result = await cmk.update_host(
-            name,
+            current,
             address=payload.address,
             alias=payload.alias,
             snmp_community=community if payload.type == "snmp" else None,
             host_type=payload.type,
         )
         if payload.folder is not None:
-            await cmk.move_host(name, payload.folder or "/")
+            await cmk.move_host(current, payload.folder or "/")
             result["folder"] = payload.folder or "/"
+        new_name = (payload.new_name or "").strip()
+        if new_name and new_name != current:
+            renamed = await cmk.rename_host(current, new_name)
+            result.update(renamed)
+            current = new_name
         await cmk.activate_changes()
         result["activated"] = True
+        result["host"] = current
         return result
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Checkmk error: {exc}") from exc
 

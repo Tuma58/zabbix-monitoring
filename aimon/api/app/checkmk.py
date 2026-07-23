@@ -294,6 +294,29 @@ class CheckmkClient:
             )
         return {"host": name, "updated": True, "attributes": update}
 
+    async def rename_host(self, name: str, new_name: str) -> dict[str, Any]:
+        new_name = (new_name or "").strip()
+        if not new_name:
+            raise ValueError("new_name is required")
+        if new_name == name:
+            return {"host": name, "renamed": False}
+        resp = await self._request(
+            "PUT",
+            f"/objects/host_config/{quote(name, safe='')}/actions/rename/invoke",
+            json={"new_name": new_name},
+            headers={"If-Match": "*"},
+        )
+        # Checkmk may return 200 or a redirect while the rename job runs
+        if resp.status_code in (200, 204, 302, 303):
+            return {"host": new_name, "old_name": name, "renamed": True, "status": resp.status_code}
+        if resp.status_code >= 400:
+            raise httpx.HTTPStatusError(
+                f"{resp.status_code} rename host: {resp.text[:500]}",
+                request=resp.request,
+                response=resp,
+            )
+        return {"host": new_name, "old_name": name, "renamed": True, "status": resp.status_code}
+
     async def move_host(self, name: str, target_folder: str) -> dict[str, Any]:
         folder = target_folder if target_folder.startswith("/") else f"/{target_folder}"
         resp = await self._request(
