@@ -7,6 +7,8 @@
   const body = document.body;
 
   let toastTimer;
+  let cache = { hosts: [], sites: [], secrets: [] };
+
   function toast(message, ok = true) {
     const el = $('#toast');
     $('p', el).textContent = message;
@@ -22,9 +24,16 @@
     const text = await res.text();
     let data = null;
     if (text) { try { data = JSON.parse(text); } catch { data = { message: text }; } }
-    if (!res.ok) { const err = new Error(data?.message || `HTTP ${res.status}`); err.status = res.status; err.payload = data; throw err; }
+    if (!res.ok) {
+      const err = new Error(data?.detail || data?.message || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.payload = data;
+      throw err;
+    }
     return data;
   }
+
+  function esc(v) { const d = document.createElement('span'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
 
   /* ---------- Navigation ---------- */
   function showView(name) {
@@ -64,7 +73,7 @@
     const box = $('#hostMini');
     if (!hosts.length) { box.innerHTML = '<div class="empty">Пока нет узлов. Установите агент одной командой или просканируйте сеть.</div>'; return; }
     box.innerHTML = hosts.slice(0, 6).map((h) => `
-      <div class="row"><div><b>${esc(h.name)}</b><br><small>${esc(h.address || '')} · ${esc(h.type || 'agent')}</small></div>
+      <div class="row"><div><b>${esc(h.name)}</b><br><small>${esc(h.address || '')} · ${esc(h.site_title || h.folder || '/')} · ${esc(h.type || 'agent')}</small></div>
       <span class="state ${stateClass(h.state)} state-right">${stateLabel(h.state)}</span></div>`).join('');
   }
 
@@ -73,14 +82,56 @@
     if (!hosts.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">Узлов пока нет.</td></tr>'; return; }
     tb.innerHTML = hosts.map((h) => `
       <tr>
-        <td><b>${esc(h.name)}</b></td>
+        <td><b>${esc(h.name)}</b>${h.alias ? `<br><small>${esc(h.alias)}</small>` : ''}</td>
         <td>${esc(h.address || '—')}</td>
+        <td>${esc(h.site_title || h.folder || 'Корень')}</td>
         <td>${esc(h.type || 'agent')}</td>
         <td><span class="state ${stateClass(h.state)}">${stateLabel(h.state)}</span></td>
-        <td>${h.services ?? 0}</td>
-        <td><button class="btn ghost" data-del="${esc(h.name)}">Удалить</button></td>
+        <td><div class="row-actions">
+          <button class="btn ghost" type="button" data-edit-host="${esc(h.name)}"><svg><use href="#i-edit"/></svg>Изменить</button>
+          <button class="btn ghost" type="button" data-del-host="${esc(h.name)}">Удалить</button>
+        </div></td>
       </tr>`).join('');
-    $$('[data-del]', tb).forEach((b) => b.addEventListener('click', () => deleteHost(b.dataset.del)));
+    $$('[data-edit-host]', tb).forEach((b) => b.addEventListener('click', () => openHostModal(b.dataset.editHost)));
+    $$('[data-del-host]', tb).forEach((b) => b.addEventListener('click', () => deleteHost(b.dataset.delHost)));
+  }
+
+  function renderSites(sites) {
+    const tb = $('#siteRows');
+    const countEl = $('#navSites');
+    const real = (sites || []).filter((s) => s.path !== '/' || true);
+    if (countEl) countEl.textContent = Math.max(0, real.length - (real.some((s) => s.path === '/') ? 0 : 0));
+    if (countEl) countEl.textContent = String((sites || []).length);
+    if (!sites.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">Площадок пока нет.</td></tr>'; return; }
+    tb.innerHTML = sites.map((s) => {
+      const isRoot = s.path === '/' || s.id === '~';
+      return `<tr>
+        <td><b>${esc(s.title || s.name || 'Корень')}</b>${isRoot ? '<br><small>корневая</small>' : ''}</td>
+        <td><code>${esc(s.path || '/')}</code></td>
+        <td>${s.hosts_count ?? 0}</td>
+        <td><div class="row-actions">
+          ${isRoot ? '' : `<button class="btn ghost" type="button" data-edit-site="${esc(s.id)}"><svg><use href="#i-edit"/></svg>Изменить</button>
+          <button class="btn ghost" type="button" data-del-site="${esc(s.id)}">Удалить</button>`}
+        </div></td>
+      </tr>`;
+    }).join('');
+    $$('[data-edit-site]', tb).forEach((b) => b.addEventListener('click', () => openSiteModal(b.dataset.editSite)));
+    $$('[data-del-site]', tb).forEach((b) => b.addEventListener('click', () => deleteSite(b.dataset.delSite)));
+  }
+
+  function fillSiteSelect(sel, selected) {
+    if (!sel) return;
+    const sites = cache.sites.length ? cache.sites : [{ path: '/', title: 'Корень', id: '~' }];
+    sel.innerHTML = sites.map((s) =>
+      `<option value="${esc(s.path)}" ${s.path === selected ? 'selected' : ''}>${esc(s.title || s.path)}</option>`
+    ).join('');
+  }
+
+  function fillSnmpSelect(sel, selected) {
+    if (!sel) return;
+    const snmp = cache.secrets.filter((s) => s.kind === 'snmp_v2c' || s.kind === 'snmp_v3');
+    sel.innerHTML = '<option value="">public (по умолчанию)</option>' +
+      snmp.map((s) => `<option value="${esc(s.id)}" ${s.id === selected ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
   }
 
   function renderSecrets(items) {
@@ -99,20 +150,23 @@
       </div>`).join('');
   }
 
-  function esc(v) { const d = document.createElement('span'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
-
   /* ---------- Load ---------- */
   async function refresh() {
     try {
-      const [sum, hosts, secrets] = await Promise.all([
+      const [sum, hosts, secrets, sites] = await Promise.all([
         api('/summary').catch(() => ({})),
         api('/hosts').catch(() => []),
         api('/secrets').catch(() => []),
+        api('/sites').catch(() => []),
       ]);
+      cache.hosts = hosts || [];
+      cache.secrets = secrets || [];
+      cache.sites = sites || [];
       renderMetrics(sum || {});
-      renderHostMini(hosts || []);
-      renderHostTable(hosts || []);
-      renderSecrets(secrets || []);
+      renderHostMini(cache.hosts);
+      renderHostTable(cache.hosts);
+      renderSites(cache.sites);
+      renderSecrets(cache.secrets);
       setSync(true);
       const eng = (sum && sum.engine) || {};
       $('#engineDot').className = 'dot' + (eng.status === 'ok' ? '' : eng.status === 'down' ? ' down' : ' warn');
@@ -137,6 +191,133 @@
     catch (e) { toast(e.message || 'Не удалось удалить узел', false); }
   }
 
+  async function deleteSite(id) {
+    const site = cache.sites.find((s) => s.id === id);
+    if (!confirm(`Удалить площадку «${site?.title || id}»? Папка должна быть пустой.`)) return;
+    try {
+      await api(`/sites/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      toast('Площадка удалена');
+      refresh();
+    } catch (e) { toast(e.message || 'Не удалось удалить площадку', false); }
+  }
+
+  /* ---------- Host modal ---------- */
+  const hostModal = $('#hostModal');
+  function openHostModal(editName) {
+    const editing = Boolean(editName);
+    const host = editing ? cache.hosts.find((h) => h.name === editName) : null;
+    $('#hostModalTitle').textContent = editing ? `Изменить «${editName}»` : 'Новый узел';
+    $('#hostEditName').value = editName || '';
+    $('#hostName').value = host?.name || '';
+    $('#hostName').disabled = editing;
+    $('#hostAddress').value = host?.address || '';
+    $('#hostAlias').value = host?.alias || '';
+    $('#hostType').value = host?.type || 'agent';
+    fillSiteSelect($('#hostSite'), host?.folder || host?.site_path || '/');
+    fillSnmpSelect($('#hostSnmpProfile'), '');
+    toggleHostSnmp();
+    hostModal?.showModal();
+    (editing ? $('#hostAddress') : $('#hostName'))?.focus();
+  }
+
+  function toggleHostSnmp() {
+    const snmp = $('#hostType')?.value === 'snmp';
+    $('#hostSnmpWrap').hidden = !snmp;
+  }
+  $('#hostType')?.addEventListener('change', toggleHostSnmp);
+
+  function closeHostModal() { hostModal?.close(); }
+  $('#hostModalClose')?.addEventListener('click', closeHostModal);
+  $('#hostModalCancel')?.addEventListener('click', closeHostModal);
+
+  $('#hostForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const editName = $('#hostEditName').value.trim();
+    const body = {
+      name: $('#hostName').value.trim(),
+      address: $('#hostAddress').value.trim(),
+      alias: $('#hostAlias').value.trim(),
+      type: $('#hostType').value,
+      folder: $('#hostSite').value || '/',
+      snmp_profile_id: $('#hostType').value === 'snmp' ? ($('#hostSnmpProfile').value || null) : null,
+    };
+    if (!body.name) { toast('Укажите имя узла', false); return; }
+    try {
+      if (editName) {
+        await api(`/hosts/${encodeURIComponent(editName)}`, {
+          method: 'PATCH',
+          body: {
+            address: body.address,
+            alias: body.alias,
+            type: body.type,
+            folder: body.folder,
+            snmp_profile_id: body.snmp_profile_id,
+          },
+        });
+        toast(`Узел «${editName}» обновлён`);
+      } else {
+        await api('/hosts', { method: 'POST', body });
+        toast(`Узел «${body.name}» добавлен`);
+      }
+      closeHostModal();
+      refresh();
+    } catch (err) {
+      toast(err.message || 'Не удалось сохранить узел', false);
+    }
+  });
+
+  /* ---------- Site modal ---------- */
+  const siteModal = $('#siteModal');
+  function openSiteModal(editId) {
+    const editing = Boolean(editId);
+    const site = editing ? cache.sites.find((s) => s.id === editId) : null;
+    $('#siteModalTitle').textContent = editing ? `Изменить «${site?.title || editId}»` : 'Новая площадка';
+    $('#siteEditId').value = editId || '';
+    $('#siteName').value = site?.name || '';
+    $('#siteName').disabled = editing;
+    $('#siteTitle').value = site?.title || '';
+    $('#siteParentWrap').hidden = editing;
+    const parents = cache.sites.length ? cache.sites : [{ path: '/', title: 'Корень' }];
+    $('#siteParent').innerHTML = parents.map((s) =>
+      `<option value="${esc(s.path)}">${esc(s.title || s.path)}</option>`
+    ).join('');
+    siteModal?.showModal();
+    (editing ? $('#siteTitle') : $('#siteName'))?.focus();
+  }
+
+  function closeSiteModal() { siteModal?.close(); }
+  $('#siteModalClose')?.addEventListener('click', closeSiteModal);
+  $('#siteModalCancel')?.addEventListener('click', closeSiteModal);
+
+  $('#siteForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const editId = $('#siteEditId').value.trim();
+    const name = $('#siteName').value.trim();
+    const title = $('#siteTitle').value.trim() || name;
+    try {
+      if (editId) {
+        await api(`/sites/${encodeURIComponent(editId)}`, { method: 'PATCH', body: { title } });
+        toast('Площадка обновлена');
+      } else {
+        if (!name) { toast('Укажите код площадки', false); return; }
+        await api('/sites', {
+          method: 'POST',
+          body: { name, title, parent: $('#siteParent').value || '/' },
+        });
+        toast(`Площадка «${title}» создана`);
+      }
+      closeSiteModal();
+      refresh();
+    } catch (err) {
+      toast(err.message || 'Не удалось сохранить площадку', false);
+    }
+  });
+
+  $('#addSite')?.addEventListener('click', () => openSiteModal(null));
+  $('#addHost')?.addEventListener('click', () => openHostModal(null));
+  $('#quickAdd')?.addEventListener('click', () => openHostModal(null));
+  $('#refreshHosts')?.addEventListener('click', refresh);
+
   /* ---------- Scan ---------- */
   $('#runScan')?.addEventListener('click', async () => {
     const cidr = $('#scanCidr').value.trim();
@@ -159,7 +340,7 @@
   function renderScan(devices) {
     const tb = $('#scanRows');
     if (!devices.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">SNMP-устройств не найдено.</td></tr>'; return; }
-    tb.innerHTML = devices.map((d, i) => `
+    tb.innerHTML = devices.map((d) => `
       <tr>
         <td><input type="checkbox" class="scan-pick" data-ip="${esc(d.ip)}" data-descr="${esc(d.sysdescr || '')}" data-vendor="${esc(d.vendor || '')}"></td>
         <td>${esc(d.ip)}</td>
@@ -187,19 +368,6 @@
       refresh();
     } catch (e) { toast(e.message || 'Не удалось добавить', false); }
   });
-
-  /* ---------- Add host quick ---------- */
-  function quickAdd() {
-    const name = prompt('Имя узла (Hostname в Checkmk):');
-    if (!name) return;
-    const address = prompt('IP-адрес или FQDN:', '') || '';
-    api('/hosts', { method: 'POST', body: { name, address, type: 'agent' } })
-      .then(() => { toast(`Узел «${name}» добавлен`); refresh(); })
-      .catch((e) => toast(e.message || 'Не удалось добавить', false));
-  }
-  $('#quickAdd')?.addEventListener('click', quickAdd);
-  $('#addHost')?.addEventListener('click', quickAdd);
-  $('#refreshHosts')?.addEventListener('click', refresh);
 
   $('#addSecret')?.addEventListener('click', () => {
     const name = prompt('Название секрета:');
@@ -273,12 +441,6 @@
           .map((a) => a.result.host)
           .concat(...actions.filter((a) => a.tool === 'add_hosts_from_scan' && a.result?.ok).map((a) => a.result.added || []));
         if (added.length) toast(`AI добавил: ${added.join(', ')}`);
-        const cfg = actions.find((a) => ['write_config', 'patch_config'].includes(a.tool) && a.result?.ok);
-        if (cfg?.result?.restart_hint?.length) {
-          toast(`Конфиг обновлён. Перезапустите: ${cfg.result.restart_hint.join(', ')}`);
-        } else if (cfg) {
-          toast(`Конфиг обновлён: ${cfg.result.path}`);
-        }
         refresh();
       } else if (res.action || actions.length) {
         refresh();

@@ -38,6 +38,26 @@ class HostIn(BaseModel):
     address: str = ""
     type: str = "agent"
     snmp_profile_id: str | None = None
+    folder: str = "/"
+    alias: str = ""
+
+
+class HostUpdateIn(BaseModel):
+    address: str | None = None
+    type: str | None = None
+    snmp_profile_id: str | None = None
+    folder: str | None = None
+    alias: str | None = None
+
+
+class SiteIn(BaseModel):
+    name: str
+    title: str = ""
+    parent: str = "/"
+
+
+class SiteUpdateIn(BaseModel):
+    title: str
 
 
 class SecretIn(BaseModel):
@@ -113,9 +133,31 @@ async def list_hosts() -> list[dict[str, Any]]:
     if not cmk.enabled:
         return []
     try:
-        return await cmk.list_hosts()
+        hosts = await cmk.list_hosts()
     except httpx.HTTPError:
         return []
+    # enrich with site titles
+    titles: dict[str, str] = {}
+    try:
+        for f in await cmk.list_folders():
+            titles[f["path"]] = f.get("title") or f["path"]
+    except httpx.HTTPError:
+        pass
+    for h in hosts:
+        path = h.get("folder") or "/"
+        h["site_path"] = path
+        h["site_title"] = titles.get(path, "Корень" if path == "/" else path)
+    return hosts
+
+
+@app.get(f"{P}/hosts/{{name}}")
+async def get_host(name: str) -> dict[str, Any]:
+    if not cmk.enabled:
+        raise HTTPException(503, "Checkmk is not configured")
+    host = await cmk.get_host(name)
+    if not host:
+        raise HTTPException(404, "Host not found")
+    return host
 
 
 @app.post(f"{P}/hosts", status_code=201)
@@ -123,8 +165,39 @@ async def create_host(payload: HostIn) -> dict[str, Any]:
     if not cmk.enabled:
         raise HTTPException(503, "Checkmk is not configured")
     community = _community_for(payload.snmp_profile_id)
+    if payload.type == "snmp" and not community:
+        community = "public"
     try:
-        return await cmk.register_and_activate(payload.name, payload.address, snmp_community=community)
+        return await cmk.register_and_activate(
+            payload.name,
+            payload.address,
+            snmp_community=community if payload.type == "snmp" else None,
+            folder=payload.folder or "/",
+            alias=payload.alias or "",
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Checkmk error: {exc}") from exc
+
+
+@app.patch(f"{P}/hosts/{{name}}")
+async def update_host(name: str, payload: HostUpdateIn) -> dict[str, Any]:
+    if not cmk.enabled:
+        raise HTTPException(503, "Checkmk is not configured")
+    community = _community_for(payload.snmp_profile_id)
+    try:
+        result = await cmk.update_host(
+            name,
+            address=payload.address,
+            alias=payload.alias,
+            snmp_community=community if payload.type == "snmp" else None,
+            host_type=payload.type,
+        )
+        if payload.folder is not None:
+            await cmk.move_host(name, payload.folder or "/")
+            result["folder"] = payload.folder or "/"
+        await cmk.activate_changes()
+        result["activated"] = True
+        return result
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Checkmk error: {exc}") from exc
 
@@ -136,6 +209,70 @@ async def delete_host(name: str) -> Response:
     try:
         await cmk.delete_host(name)
         await cmk.activate_changes()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Checkmk error: {exc}") from exc
+    return Response(status_code=204)
+
+
+# ---------- sites / площадки (Checkmk folders) ----------
+@app.get(f"{P}/sites")
+async def list_sites() -> list[dict[str, Any]]:
+    if not cmk.enabled:
+        return [{"id": "~", "path": "/", "name": "", "title": "Корень", "hosts_count": 0}]
+    try:
+        folders = await cmk.list_folders()
+        hosts = await cmk.list_hosts()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Checkmk error: {exc}") from exc
+    counts: dict[str, int] = {}
+    for h in hosts:
+        p = h.get("folder") or "/"
+        counts[p] = counts.get(p, 0) + 1
+    for f in folders:
+        f["hosts_count"] = counts.get(f["path"], 0)
+    return folders
+
+
+@app.post(f"{P}/sites", status_code=201)
+async def create_site(payload: SiteIn) -> dict[str, Any]:
+    if not cmk.enabled:
+        raise HTTPException(503, "Checkmk is not configured")
+    try:
+        site = await cmk.create_folder(payload.name, title=payload.title or payload.name, parent=payload.parent or "/")
+        await cmk.activate_changes()
+        site["hosts_count"] = 0
+        site["activated"] = True
+        return site
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Checkmk error: {exc}") from exc
+
+
+@app.patch(f"{P}/sites/{{site_id}}")
+async def update_site(site_id: str, payload: SiteUpdateIn) -> dict[str, Any]:
+    if not cmk.enabled:
+        raise HTTPException(503, "Checkmk is not configured")
+    try:
+        site = await cmk.update_folder(site_id, title=payload.title)
+        await cmk.activate_changes()
+        site["activated"] = True
+        return site
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Checkmk error: {exc}") from exc
+
+
+@app.delete(f"{P}/sites/{{site_id}}", status_code=204, response_class=Response)
+async def delete_site(site_id: str) -> Response:
+    if not cmk.enabled:
+        raise HTTPException(503, "Checkmk is not configured")
+    try:
+        await cmk.delete_folder(site_id)
+        await cmk.activate_changes()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Checkmk error: {exc}") from exc
     return Response(status_code=204)
