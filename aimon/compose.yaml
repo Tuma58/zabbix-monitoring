@@ -1,7 +1,10 @@
 name: aimon
 
-# AIMon стек: Checkmk Raw (движок сбора) + backend API + дашборд (nginx).
-# Наружу порты публикует только edge/dashboard nginx.
+# AIMon: Checkmk Raw + API + Dashboard + Edge (те же порты, что у NetMon).
+#
+# HTTP:  7080 Checkmk · 7081 Dashboard · 7000 API
+# HTTPS: 7443 Checkmk · 7444 Dashboard · 7445 API
+# Agent: 10051 → Checkmk agent receiver (6557)
 
 services:
   checkmk:
@@ -12,13 +15,15 @@ services:
       CMK_SITE_ID: ${CHECKMK_SITE:-cmk}
       CMK_PASSWORD: ${CHECKMK_ADMIN_PASSWORD:?CHECKMK_ADMIN_PASSWORD is required}
     ports:
-      - "10051:6557"   # Checkmk livestatus/agent (по необходимости ограничьте firewall)
+      - "${AGENT_BIND:-0.0.0.0}:${AGENT_PORT:-10051}:6557"
     volumes:
       - checkmk-data:/omd/sites
     tmpfs:
       - /opt/omd/sites/cmk/tmp:uid=1000,gid=1000
     cap_add:
       - SYS_ADMIN
+    expose:
+      - "5000"
     networks:
       - aimon
 
@@ -36,6 +41,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       DATA_DIR: /data
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.66:7081,https://100.10.10.66:7444,http://94.181.181.43:7081,https://94.181.181.43:7444}
     volumes:
       - api-data:/data
     depends_on:
@@ -52,9 +58,29 @@ services:
       - ./dashboard:/usr/share/nginx/html:ro
       - ./agents:/usr/share/nginx/html/agents:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-8080}:80"
     depends_on:
+      - api
+    expose:
+      - "80"
+    networks:
+      - aimon
+
+  edge:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    ports:
+      - "${CHECKMK_WEB_BIND:-0.0.0.0}:${CHECKMK_WEB_PORT:-7080}:7080"
+      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-7081}:7081"
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-7000}:7000"
+      - "${TLS_BIND:-0.0.0.0}:${CHECKMK_TLS_PORT:-7443}:7443"
+      - "${TLS_BIND:-0.0.0.0}:${DASHBOARD_TLS_PORT:-7444}:7444"
+      - "${TLS_BIND:-0.0.0.0}:${API_TLS_PORT:-7445}:7445"
+    volumes:
+      - ./edge/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - checkmk
+      - dashboard
       - api
     networks:
       - aimon
