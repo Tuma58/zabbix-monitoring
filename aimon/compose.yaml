@@ -1,0 +1,68 @@
+name: aimon
+
+# AIMon стек: Checkmk Raw (движок сбора) + backend API + дашборд (nginx).
+# Наружу порты публикует только edge/dashboard nginx.
+
+services:
+  checkmk:
+    image: checkmk/check-mk-raw:2.3.0-latest
+    restart: unless-stopped
+    hostname: checkmk
+    environment:
+      CMK_SITE_ID: ${CHECKMK_SITE:-cmk}
+      CMK_PASSWORD: ${CHECKMK_ADMIN_PASSWORD:?CHECKMK_ADMIN_PASSWORD is required}
+    ports:
+      - "10051:6557"   # Checkmk livestatus/agent (по необходимости ограничьте firewall)
+    volumes:
+      - checkmk-data:/omd/sites
+    tmpfs:
+      - /opt/omd/sites/cmk/tmp:uid=1000,gid=1000
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - aimon
+
+  api:
+    build: ./api
+    image: aimon-api:local
+    restart: unless-stopped
+    environment:
+      CHECKMK_URL: http://checkmk:5000/${CHECKMK_SITE:-cmk}/check_mk/api/1.0
+      CHECKMK_SITE: ${CHECKMK_SITE:-cmk}
+      CHECKMK_USER: ${CHECKMK_AUTOMATION_USER:-automation}
+      CHECKMK_SECRET: ${CHECKMK_AUTOMATION_SECRET:-}
+      SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:?SECRETS_MASTER_KEY is required}
+      SCAN_ALLOWLIST: ${SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      DATA_DIR: /data
+    volumes:
+      - api-data:/data
+    depends_on:
+      - checkmk
+    expose:
+      - "8000"
+    networks:
+      - aimon
+
+  dashboard:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./agents:/usr/share/nginx/html/agents:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      - api
+    networks:
+      - aimon
+
+volumes:
+  checkmk-data:
+  api-data:
+
+networks:
+  aimon:
+    driver: bridge

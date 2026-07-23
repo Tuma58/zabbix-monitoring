@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF8F5">
+  <title>AIMon — AI-мониторинг</title>
+  <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></symbol>
+    <symbol id="i-radar" viewBox="0 0 24 24"><path d="M12 12 19 5"/><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 8a4 4 0 1 0 4 4"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M17 5l2 2M15 7l2 2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7-7-1Z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6 6.7L4 11m16 2-2 4.3A7 7 0 0 1 5.8 15"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+    <symbol id="i-net" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="8" rx="2"/><path d="M7 14h.01M11 14h.01M16 14h2M12 10V4M8 4h8"/></symbol>
+  </svg>
+
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <div class="shell">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10.2"/></svg></span>
+        <span class="brand-name">AIMon<small>CoreSupport</small></span>
+        <button class="icon-btn only-mobile" id="navClose" aria-label="Закрыть меню"><svg><use href="#i-close"/></svg></button>
+      </div>
+
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="nav-item active" data-view="overview" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
+        <a class="nav-item" data-view="hosts" href="#hosts"><svg><use href="#i-server"/></svg><span>Узлы</span><b id="navHosts">0</b></a>
+        <a class="nav-item" data-view="scan" href="#scan"><svg><use href="#i-radar"/></svg><span>Скан сети</span></a>
+        <a class="nav-item" data-view="secrets" href="#secrets"><svg><use href="#i-key"/></svg><span>Секреты</span></a>
+        <a class="nav-item" data-view="assistant" href="#assistant"><svg><use href="#i-spark"/></svg><span>AI-ассистент</span></a>
+        <a class="nav-item" data-view="settings" href="#settings"><svg><use href="#i-cog"/></svg><span>Настройки</span></a>
+      </nav>
+
+      <div class="side-status">
+        <span class="dot" id="engineDot"></span>
+        <div>
+          <strong id="engineName">Checkmk</strong>
+          <small id="engineMeta">проверка связи…</small>
+        </div>
+      </div>
+    </aside>
+    <button class="scrim" id="scrim" aria-label="Закрыть меню"></button>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="navOpen" aria-label="Меню"><svg><use href="#i-menu"/></svg></button>
+        <div class="search">
+          <svg><use href="#i-server"/></svg>
+          <input id="search" type="search" placeholder="Поиск узла, IP или сервиса" autocomplete="off">
+        </div>
+        <div class="topbar-actions">
+          <span class="sync" id="sync"><span class="dot"></span>Ожидание API</span>
+          <button class="btn primary" id="quickAdd"><svg><use href="#i-plus"/></svg><span class="hide-xs">Добавить узел</span></button>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- Overview -->
+        <section class="view active" data-view="overview">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Инфраструктура · 24/7</p>
+              <h1>Обзор мониторинга</h1>
+              <p class="lead" id="overviewLead">Загрузка данных из Checkmk…</p>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <article class="metric">
+              <span class="metric-ic indigo"><svg><use href="#i-server"/></svg></span>
+              <div class="metric-val" id="mHosts">0</div>
+              <div class="metric-label">Узлов на мониторинге</div>
+              <div class="metric-note ok" id="mHostsNote"><svg><use href="#i-check"/></svg>нет узлов</div>
+            </article>
+            <article class="metric">
+              <span class="metric-ic green"><svg><use href="#i-check"/></svg></span>
+              <div class="metric-val" id="mUp">0<span>%</span></div>
+              <div class="metric-label">Доступность</div>
+              <div class="metric-note" id="mUpNote">—</div>
+            </article>
+            <article class="metric">
+              <span class="metric-ic terra"><svg><use href="#i-alert"/></svg></span>
+              <div class="metric-val" id="mProblems">0</div>
+              <div class="metric-label">Активные проблемы</div>
+              <div class="metric-note" id="mProblemsNote">проблем нет</div>
+            </article>
+            <article class="metric">
+              <span class="metric-ic blue"><svg><use href="#i-cpu"/></svg></span>
+              <div class="metric-val" id="mServices">0</div>
+              <div class="metric-label">Сервисов</div>
+              <div class="metric-note" id="mServicesNote">discovery</div>
+            </article>
+          </div>
+
+          <div class="grid-2">
+            <section class="card">
+              <div class="card-head"><h2>Состояние узлов</h2><button class="btn ghost" id="refreshHosts"><svg><use href="#i-refresh"/></svg>Обновить</button></div>
+              <div class="host-mini" id="hostMini">
+                <div class="empty">Пока нет узлов. Установите агент одной командой или просканируйте сеть.</div>
+              </div>
+            </section>
+
+            <section class="card ai-card">
+              <div class="card-head"><h2>AI-ассистент</h2><span class="badge">DeepSeek</span></div>
+              <div class="ai-orb-wrap">
+                <div class="ai-orb" id="aiOrbMini"><span></span><span></span><span></span><i><svg><use href="#i-spark"/></svg></i></div>
+              </div>
+              <p class="ai-hint">Спросите на естественном языке: «добавь микротик 10.0.0.1», «что сломалось за час», «покажи загрузку CPU».</p>
+              <button class="btn primary wide" data-goto="assistant"><svg><use href="#i-spark"/></svg>Открыть ассистента</button>
+            </section>
+          </div>
+        </section>
+
+        <!-- Hosts -->
+        <section class="view" data-view="hosts">
+          <div class="page-head">
+            <div><p class="eyebrow">Каталог</p><h1>Узлы мониторинга</h1><p class="lead">Все хосты Checkmk: агенты и SNMP-устройства.</p></div>
+            <button class="btn primary" id="addHost"><svg><use href="#i-plus"/></svg>Добавить узел</button>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table class="tbl" id="hostTable">
+                <thead><tr><th>Узел</th><th>Адрес</th><th>Тип</th><th>Состояние</th><th>Сервисы</th><th></th></tr></thead>
+                <tbody id="hostRows"><tr><td colspan="6" class="empty">Узлов пока нет.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scan -->
+        <section class="view" data-view="scan">
+          <div class="page-head"><div><p class="eyebrow">Обнаружение</p><h1>Скан сети (SNMP)</h1><p class="lead">Найдите SNMP-устройства в сегменте и добавьте в мониторинг.</p></div></div>
+          <div class="card">
+            <div class="form-row">
+              <label class="field">
+                <span>Подсеть (CIDR)</span>
+                <input id="scanCidr" placeholder="10.0.0.0/24" value="">
+              </label>
+              <label class="field">
+                <span>SNMP-профиль</span>
+                <select id="scanProfile"><option value="">Выберите профиль</option></select>
+              </label>
+              <button class="btn primary" id="runScan"><svg><use href="#i-radar"/></svg>Сканировать</button>
+            </div>
+            <div class="scan-status" id="scanStatus" hidden></div>
+            <div class="table-wrap">
+              <table class="tbl" id="scanTable">
+                <thead><tr><th><input type="checkbox" id="scanAll"></th><th>IP</th><th>Устройство (sysDescr)</th><th>Вендор</th><th>Статус</th></tr></thead>
+                <tbody id="scanRows"><tr><td colspan="5" class="empty">Запустите скан, чтобы увидеть найденные устройства.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="scan-actions">
+              <button class="btn primary" id="addSelected" disabled><svg><use href="#i-plus"/></svg>Добавить выбранные</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Secrets -->
+        <section class="view" data-view="secrets">
+          <div class="page-head"><div><p class="eyebrow">Безопасность</p><h1>Секреты</h1><p class="lead">Токены агентов и SNMP-профили. Значения не показываются после сохранения.</p></div>
+            <button class="btn primary" id="addSecret"><svg><use href="#i-plus"/></svg>Новый секрет</button></div>
+          <div class="card">
+            <div class="secret-list" id="secretList">
+              <div class="empty">Секретов пока нет.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Assistant -->
+        <section class="view" data-view="assistant">
+          <div class="page-head"><div><p class="eyebrow">DeepSeek</p><h1>AI-ассистент</h1><p class="lead">Управляйте мониторингом на естественном языке.</p></div></div>
+          <div class="assistant">
+            <div class="ai-hero">
+              <div class="ai-orb big" id="aiOrb"><span></span><span></span><span></span><i><svg><use href="#i-spark"/></svg></i></div>
+            </div>
+            <div class="chat" id="chat">
+              <div class="msg bot"><div class="bubble">Здравствуйте! Я помогу добавить узлы, объяснить проблемы и ответить по телеметрии. Напишите, например: «просканируй 10.0.0.0/24».</div></div>
+            </div>
+            <form class="chat-bar" id="chatForm">
+              <input id="chatInput" placeholder="Спросите ассистента…" autocomplete="off">
+              <button class="btn primary icon" type="submit" aria-label="Отправить"><svg><use href="#i-send"/></svg></button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="view" data-view="settings">
+          <div class="page-head"><div><p class="eyebrow">Система</p><h1>Настройки</h1><p class="lead">Подключение к Checkmk и деплой.</p></div></div>
+          <div class="card">
+            <dl class="kv">
+              <div><dt>Движок сбора</dt><dd>Checkmk Raw</dd></div>
+              <div><dt>Backend API</dt><dd id="setApi">/api/v1</dd></div>
+              <div><dt>Статус Checkmk</dt><dd id="setEngine">проверка…</dd></div>
+            </dl>
+            <div class="cmd">
+              <p>Установка агента (одна команда):</p>
+              <pre id="agentCmd">curl -fsSLk "https://HOST/agents/install-linux.sh" | sudo bash -s -- --server HOST --token &lt;TOKEN&gt; --hostname auto</pre>
+            </div>
+          </div>
+        </section>
+
+        <footer class="foot"><span>AIMon · CoreSupport</span><span id="footStatus">Подключение к API…</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <!-- Floating AI launcher -->
+  <button class="ai-fab" id="aiFab" aria-label="AI-ассистент"><span></span><svg><use href="#i-spark"/></svg></button>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"><svg><use href="#i-check"/></svg><p></p></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
