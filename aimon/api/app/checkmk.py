@@ -309,6 +309,7 @@ class CheckmkClient:
         alias: str | None = None,
         snmp_community: str | None = None,
         host_type: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         update: dict[str, Any] = {}
         if address is not None:
@@ -323,6 +324,22 @@ class CheckmkClient:
         elif host_type == "agent":
             update["tag_agent"] = "cmk-agent"
             update["tag_snmp_ds"] = "no-snmp"
+        if labels is not None:
+            # Merge with existing labels so we do not wipe unrelated keys.
+            current = await self.get_host(name)
+            existing = {}
+            if current:
+                raw = (current.get("attributes") or {}).get("labels") or {}
+                if isinstance(raw, dict):
+                    existing = {str(k): str(v) for k, v in raw.items()}
+            merged = dict(existing)
+            for k, v in labels.items():
+                key = str(k)
+                if v is None or v == "":
+                    merged.pop(key, None)
+                else:
+                    merged[key] = str(v)
+            update["labels"] = merged
         if not update:
             return {"host": name, "updated": False}
         resp = await self._request(

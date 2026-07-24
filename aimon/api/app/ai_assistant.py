@@ -20,7 +20,14 @@ from app.probe import (
     test_snmp,
     test_tcp,
 )
-from app.scan import cidr_is_allowed, sanitize_hostname, scan_snmp, suggest_device_identity
+from app.scan import (
+    DEVICE_TYPE_LABELS,
+    cidr_is_allowed,
+    device_type_label,
+    sanitize_hostname,
+    scan_snmp,
+    suggest_device_identity,
+)
 from app.secrets import SecretBox
 from app.store import JsonStore
 from app.device_ai import classify_devices_with_ai
@@ -40,8 +47,25 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_hosts",
-            "description": "Список узлов в мониторинге.",
+            "description": (
+                "Список узлов мониторинга с полями дашборда: name, address, alias, "
+                "type (agent|snmp), device_type / device_type_label (тип устройства), "
+                "vendor, folder, site_title, state."
+            ),
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_host",
+            "description": "Карточка одного узла со всеми полями дашборда, включая тип устройства.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -54,10 +78,15 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "name": {"type": "string"},
                     "address": {"type": "string"},
-                    "type": {"type": "string", "enum": ["agent", "snmp"]},
+                    "type": {"type": "string", "enum": ["agent", "snmp"], "description": "Способ мониторинга"},
                     "snmp_community": {"type": "string"},
                     "folder": {"type": "string", "description": "Путь площадки, напр. /office"},
                     "alias": {"type": "string"},
+                    "device_type": {
+                        "type": "string",
+                        "description": "Тип устройства: router, switch, ap, printer, server, ups, firewall, camera, nas, network, host",
+                    },
+                    "vendor": {"type": "string"},
                 },
                 "required": ["address"],
                 "additionalProperties": False,
@@ -68,17 +97,25 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "update_host",
-            "description": "Изменить узел: адрес, тип, площадку, alias или переименовать.",
+            "description": (
+                "Изменить узел: адрес, способ мониторинга (type), тип устройства (device_type), "
+                "площадку, alias, vendor или переименовать."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Текущее имя узла"},
                     "new_name": {"type": "string"},
                     "address": {"type": "string"},
-                    "type": {"type": "string", "enum": ["agent", "snmp"]},
+                    "type": {"type": "string", "enum": ["agent", "snmp"], "description": "Способ мониторинга"},
                     "snmp_community": {"type": "string"},
                     "folder": {"type": "string"},
                     "alias": {"type": "string"},
+                    "device_type": {
+                        "type": "string",
+                        "description": "Тип устройства (колонка «Тип устройства» на дашборде)",
+                    },
+                    "vendor": {"type": "string"},
                 },
                 "required": ["name"],
                 "additionalProperties": False,
@@ -579,6 +616,18 @@ TOOLS = BUILTIN_TOOLS
 SYSTEM_PROMPT = """Ты AIMon — ассистент мониторинга на Checkmk.
 Отвечай кратко по-русски. У тебя есть память диалога за последний час — учитывай предыдущие реплики.
 
+Сущности дашборда доступны через tools (те же данные, что в UI/API):
+- узлы: list_hosts / get_host / add_host / update_host / delete_host / move_hosts
+- площадки: list_sites / create_site / update_site / delete_site
+- скан: scan_network / add_hosts_from_scan
+- пользователи, секреты, конфиги, кастомные tools — соответствующие list_*/create_*/update_*/delete_*
+
+Важно про типы:
+- type = способ мониторинга: agent | snmp (колонка «Мониторинг»).
+- device_type / device_type_label = тип устройства: router, switch, ap, printer, server, ups… (колонка «Тип устройства»).
+  Когда пользователь спрашивает «тип устройства» — смотри device_type_label из list_hosts/get_host.
+  Чтобы задать тип устройства — update_host(device_type=...).
+
 Правила:
 - Добавить/подключить узел → сразу add_host (есть IP — не переспрашивай). Если указана площадка — передай folder.
 - Скан сети → scan_network; добавление найденных → add_hosts_from_scan с folder, если пользователь назвал площадку. Имена и псевдонимы уже подготовлены сканом.
@@ -811,6 +860,8 @@ class AIAssistant:
                 return await self._get_summary()
             if name == "list_hosts":
                 return await self._list_hosts()
+            if name == "get_host":
+                return await self._get_host(args)
             if name == "add_host":
                 return await self._add_host(args)
             if name == "update_host":
@@ -978,45 +1029,95 @@ class AIAssistant:
                 return {"ok": False, "error": res.get("error"), "steps": results}
         return {"ok": True, "tool": tool.get("name"), "steps": results}
 
+    def _site_titles(self, folders: list[dict[str, Any]] | None = None) -> dict[str, str]:
+        titles: dict[str, str] = {"/": "Корень"}
+        for f in folders or []:
+            path = f.get("path") or "/"
+            titles[path] = f.get("title") or path
+        return titles
+
+    def _serialize_host(self, h: dict[str, Any], *, site_titles: dict[str, str] | None = None) -> dict[str, Any]:
+        path = h.get("folder") or h.get("site_path") or "/"
+        titles = site_titles or {}
+        dtype = str(h.get("device_type") or "")
+        return {
+            "name": h.get("name"),
+            "address": h.get("address") or "",
+            "alias": h.get("alias") or "",
+            "type": h.get("type") or "agent",
+            "type_label": "SNMP" if (h.get("type") or "") == "snmp" else "Агент",
+            "device_type": dtype,
+            "device_type_label": h.get("device_type_label") or device_type_label(dtype),
+            "vendor": h.get("vendor") or "",
+            "folder": path,
+            "site_path": path,
+            "site_title": h.get("site_title") or titles.get(path) or ("Корень" if path == "/" else path),
+            "state": h.get("state") or "up",
+        }
+
+    async def _hosts_enriched(self) -> list[dict[str, Any]]:
+        if not self.cmk.enabled:
+            return []
+        hosts = await self.cmk.list_hosts()
+        titles: dict[str, str] = {"/": "Корень"}
+        try:
+            for f in await self.cmk.list_folders():
+                titles[f.get("path") or "/"] = f.get("title") or f.get("path") or "/"
+        except httpx.HTTPError:
+            pass
+        return [self._serialize_host(h, site_titles=titles) for h in hosts]
+
+    def _normalize_device_type(self, value: Any) -> str:
+        raw = str(value or "").strip().lower()
+        if not raw:
+            return ""
+        if raw in DEVICE_TYPE_LABELS:
+            return raw
+        # accept Russian labels
+        for key, label in DEVICE_TYPE_LABELS.items():
+            if label.lower() == raw:
+                return key
+        return raw
+
     async def _get_summary(self) -> dict[str, Any]:
         if not self.cmk.enabled:
-            return {"ok": True, "engine": "disabled", "hosts_total": 0}
+            return {"ok": True, "engine": "disabled", "hosts_total": 0, "hosts": []}
         ver = await self.cmk.version()
-        hosts = await self.cmk.list_hosts()
+        hosts = await self._hosts_enriched()
+        by_device: dict[str, int] = {}
+        for h in hosts:
+            key = h.get("device_type_label") or "Не определено"
+            by_device[key] = by_device.get(key, 0) + 1
         return {
             "ok": True,
             "engine": ver.get("versions", {}).get("checkmk", "Checkmk"),
             "hosts_total": len(hosts),
-            "hosts": [
-                {
-                    "name": h["name"],
-                    "address": h.get("address"),
-                    "type": h.get("type"),
-                    "folder": h.get("folder"),
-                    "alias": h.get("alias"),
-                }
-                for h in hosts[:50]
-            ],
+            "by_device_type": by_device,
+            "hosts": hosts[:50],
         }
 
     async def _list_hosts(self) -> dict[str, Any]:
         if not self.cmk.enabled:
-            return {"ok": True, "hosts": []}
-        hosts = await self.cmk.list_hosts()
-        return {
-            "ok": True,
-            "count": len(hosts),
-            "hosts": [
-                {
-                    "name": h["name"],
-                    "address": h.get("address"),
-                    "type": h.get("type"),
-                    "folder": h.get("folder"),
-                    "alias": h.get("alias"),
-                }
-                for h in hosts
-            ],
-        }
+            return {"ok": True, "count": 0, "hosts": []}
+        hosts = await self._hosts_enriched()
+        return {"ok": True, "count": len(hosts), "hosts": hosts}
+
+    async def _get_host(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name is required"}
+        host = await self.cmk.get_host(name)
+        if not host:
+            return {"ok": False, "error": f"host not found: {name}"}
+        titles: dict[str, str] = {"/": "Корень"}
+        try:
+            for f in await self.cmk.list_folders():
+                titles[f.get("path") or "/"] = f.get("title") or f.get("path") or "/"
+        except httpx.HTTPError:
+            pass
+        return {"ok": True, "host": self._serialize_host(host, site_titles=titles)}
 
     async def _add_host(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self.cmk.enabled:
@@ -1029,16 +1130,32 @@ class AIAssistant:
         community = str(args.get("snmp_community") or "public") if host_type == "snmp" else None
         folder = str(args.get("folder") or "/").strip() or "/"
         alias = str(args.get("alias") or "").strip()
+        device_type = self._normalize_device_type(args.get("device_type"))
+        if not device_type:
+            device_type = "server" if host_type == "agent" else "network"
+        vendor = str(args.get("vendor") or "").strip().lower()
+        labels = {
+            "aimon/device_type": device_type,
+            "aimon/vendor": vendor,
+        }
         result = await self.cmk.register_and_activate(
-            name, address, snmp_community=community, folder=folder, alias=alias,
-            labels={"aimon/device_type": "server" if host_type == "agent" else "network"},
+            name,
+            address,
+            snmp_community=community,
+            folder=folder,
+            alias=alias,
+            labels={k: v for k, v in labels.items() if v},
         )
         return {
             "ok": True,
             "host": result["host"],
             "address": address,
             "type": host_type,
+            "device_type": device_type,
+            "device_type_label": device_type_label(device_type),
+            "vendor": vendor,
             "folder": folder,
+            "alias": alias,
             "activated": True,
         }
 
@@ -1066,12 +1183,21 @@ class AIAssistant:
             if not (host_type == "snmp" and community):
                 host_type = None
 
+        labels: dict[str, str] | None = None
+        if args.get("device_type") is not None or args.get("vendor") is not None:
+            labels = {}
+            if args.get("device_type") is not None:
+                labels["aimon/device_type"] = self._normalize_device_type(args.get("device_type"))
+            if args.get("vendor") is not None:
+                labels["aimon/vendor"] = str(args.get("vendor") or "").strip().lower()
+
         result = await self.cmk.update_host(
             name,
             address=address,
             alias=alias,
             snmp_community=community if args.get("type") == "snmp" else None,
             host_type=host_type,
+            labels=labels,
         )
         folder = args.get("folder")
         if folder is not None:
@@ -1081,6 +1207,12 @@ class AIAssistant:
             result["folder"] = folder or "/"
         await self.cmk.activate_changes()
         result["activated"] = True
+        if labels is not None:
+            if "aimon/device_type" in labels:
+                result["device_type"] = labels["aimon/device_type"]
+                result["device_type_label"] = device_type_label(labels["aimon/device_type"])
+            if "aimon/vendor" in labels:
+                result["vendor"] = labels["aimon/vendor"]
 
         new_name = str(args.get("new_name") or "").strip()
         current = name
@@ -1108,9 +1240,20 @@ class AIAssistant:
 
     async def _list_sites(self) -> dict[str, Any]:
         if not self.cmk.enabled:
-            return {"ok": True, "sites": [{"id": "~", "path": "/", "title": "Корень"}]}
+            return {"ok": True, "count": 1, "sites": [{"id": "~", "path": "/", "title": "Корень", "hosts_count": 0}]}
         folders = await self.cmk.list_folders()
-        return {"ok": True, "count": len(folders), "sites": folders}
+        counts: dict[str, int] = {}
+        try:
+            for h in await self.cmk.list_hosts():
+                path = h.get("folder") or "/"
+                counts[path] = counts.get(path, 0) + 1
+        except httpx.HTTPError:
+            pass
+        sites = []
+        for f in folders:
+            path = f.get("path") or "/"
+            sites.append({**f, "hosts_count": counts.get(path, 0)})
+        return {"ok": True, "count": len(sites), "sites": sites}
 
     async def _create_site(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self.cmk.enabled:

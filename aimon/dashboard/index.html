@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=scan5">
+  <link rel="stylesheet" href="styles.css?v=ai-dtype1">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -389,8 +389,24 @@
         <label class="field"><span>Имя (hostname)</span><input id="hostName" required placeholder="web-01" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" title="Латиница, цифры, . _ -"></label>
         <label class="field"><span>IP / FQDN</span><input id="hostAddress" placeholder="10.0.0.10" autocomplete="off"></label>
         <label class="field"><span>Псевдоним</span><input id="hostAlias" placeholder="необязательно" autocomplete="off"></label>
-        <label class="field"><span>Тип</span>
-          <select id="hostType"><option value="agent">Agent</option><option value="snmp">SNMP</option></select>
+        <label class="field"><span>Мониторинг</span>
+          <select id="hostType"><option value="agent">Агент</option><option value="snmp">SNMP</option></select>
+        </label>
+        <label class="field"><span>Тип устройства</span>
+          <select id="hostDeviceType">
+            <option value="">Не задан</option>
+            <option value="router">Роутер</option>
+            <option value="switch">Коммутатор</option>
+            <option value="ap">Точка доступа</option>
+            <option value="firewall">Файрвол</option>
+            <option value="printer">Принтер</option>
+            <option value="server">Сервер</option>
+            <option value="ups">ИБП</option>
+            <option value="camera">Камера</option>
+            <option value="nas">NAS</option>
+            <option value="network">Сеть</option>
+            <option value="host">Хост</option>
+          </select>
         </label>
         <label class="field"><span>Площадка</span><select id="hostSite"></select></label>
         <label class="field" id="hostSnmpWrap" hidden><span>SNMP-профиль</span><select id="hostSnmpProfile"></select></label>
@@ -454,6 +470,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=scan5"></script>
+  <script src="app.js?v=ai-dtype1"></script>
 </body>
 </html>

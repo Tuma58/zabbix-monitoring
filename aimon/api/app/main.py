@@ -112,6 +112,8 @@ class HostIn(BaseModel):
     snmp_profile_id: str | None = None
     folder: str = "/"
     alias: str = ""
+    device_type: str = ""
+    vendor: str = ""
 
 
 class HostUpdateIn(BaseModel):
@@ -121,6 +123,8 @@ class HostUpdateIn(BaseModel):
     snmp_profile_id: str | None = None
     folder: str | None = None
     alias: str | None = None
+    device_type: str | None = None
+    vendor: str | None = None
 
 
 class SiteIn(BaseModel):
@@ -356,6 +360,11 @@ async def create_host(payload: HostIn, _: AuthUser = Depends(require_caps("hosts
     community = _community_for(payload.snmp_profile_id)
     if payload.type == "snmp" and not community:
         community = "public"
+    labels: dict[str, str] = {}
+    if payload.device_type:
+        labels["aimon/device_type"] = payload.device_type.strip().lower()
+    if payload.vendor:
+        labels["aimon/vendor"] = payload.vendor.strip().lower()
     try:
         return await cmk.register_and_activate(
             payload.name,
@@ -363,6 +372,7 @@ async def create_host(payload: HostIn, _: AuthUser = Depends(require_caps("hosts
             snmp_community=community if payload.type == "snmp" else None,
             folder=payload.folder or "/",
             alias=payload.alias or "",
+            labels=labels or None,
         )
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Checkmk error: {exc}") from exc
@@ -394,12 +404,21 @@ async def update_host(
             if not (host_type == "snmp" and community):
                 host_type = None
 
+        labels: dict[str, str] | None = None
+        if payload.device_type is not None or payload.vendor is not None:
+            labels = {}
+            if payload.device_type is not None:
+                labels["aimon/device_type"] = (payload.device_type or "").strip().lower()
+            if payload.vendor is not None:
+                labels["aimon/vendor"] = (payload.vendor or "").strip().lower()
+
         result = await cmk.update_host(
             current,
             address=address,
             alias=alias,
             snmp_community=community if payload.type == "snmp" else None,
             host_type=host_type,
+            labels=labels,
         )
 
         target_folder = payload.folder

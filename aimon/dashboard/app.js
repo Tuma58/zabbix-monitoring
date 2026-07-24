@@ -487,6 +487,7 @@
     $('#hostAddress').value = host?.address || '';
     $('#hostAlias').value = host?.alias || '';
     $('#hostType').value = host?.type || 'agent';
+    $('#hostDeviceType').value = host?.device_type || '';
     fillSiteSelect($('#hostSite'), host?.folder || host?.site_path || '/');
     fillSnmpSelect($('#hostSnmpProfile'), '');
     toggleHostSnmp();
@@ -512,6 +513,7 @@
       address: $('#hostAddress').value.trim(),
       alias: $('#hostAlias').value.trim(),
       type: $('#hostType').value,
+      device_type: $('#hostDeviceType')?.value || '',
       folder: $('#hostSite').value || '/',
       snmp_profile_id: $('#hostType').value === 'snmp' ? ($('#hostSnmpProfile').value || null) : null,
     };
