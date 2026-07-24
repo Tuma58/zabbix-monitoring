@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=ai-dtype1">
+  <link rel="stylesheet" href="styles.css?v=gera1">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -65,7 +65,7 @@
         <a class="nav-item" data-view="hosts" data-cap="hosts_read" href="#hosts"><svg><use href="#i-server"/></svg><span>Узлы</span><b id="navHosts">0</b></a>
         <a class="nav-item" data-view="scan" data-cap="scan" href="#scan"><svg><use href="#i-radar"/></svg><span>Скан сети</span></a>
         <a class="nav-item" data-view="secrets" data-cap="secrets" href="#secrets"><svg><use href="#i-key"/></svg><span>Секреты</span></a>
-        <a class="nav-item" data-view="assistant" data-cap="ai" href="#assistant"><svg><use href="#i-spark"/></svg><span>AI-ассистент</span></a>
+        <a class="nav-item" data-view="assistant" data-cap="ai" href="#assistant"><svg><use href="#i-spark"/></svg><span>Гера</span></a>
         <a class="nav-item" data-view="settings" data-cap="settings" href="#settings"><svg><use href="#i-cog"/></svg><span>Настройки</span></a>
       </nav>
 
@@ -148,12 +148,16 @@
             </section>
 
             <section class="card ai-card">
-              <div class="card-head"><h2>AI-ассистент</h2><span class="badge">DeepSeek</span></div>
-              <div class="ai-orb-wrap">
-                <div class="ai-orb" id="aiOrbMini"><span></span><span></span><span></span><i><svg><use href="#i-spark"/></svg></i></div>
+              <div class="card-head"><h2>Гера</h2><span class="badge">AI-ассистент</span></div>
+              <div class="gera mini" data-state="idle" id="geraMini" aria-hidden="true">
+                <div class="gera-rings"><span></span><span></span><span></span></div>
+                <div class="gera-face">
+                  <img class="gera-img idle" src="assets/gera-idle.jpg" alt="">
+                  <img class="gera-img think" src="assets/gera-thinking.jpg" alt="">
+                </div>
               </div>
-              <p class="ai-hint">Спросите на естественном языке: «добавь микротик 10.0.0.1», «что сломалось за час», «покажи загрузку CPU».</p>
-              <button class="btn primary wide" data-goto="assistant"><svg><use href="#i-spark"/></svg>Открыть ассистента</button>
+              <p class="ai-hint">Гера ждёт команду: «добавь микротик 10.0.0.1», «что сломалось», «типы устройств».</p>
+              <button class="btn primary wide" data-goto="assistant">Открыть чат с Герой</button>
             </section>
           </div>
         </section>
@@ -313,21 +317,33 @@
         <section class="view" data-view="assistant">
           <div class="page-head">
             <div>
-              <p class="eyebrow">DeepSeek</p>
-              <h1>AI-ассистент</h1>
-              <p class="lead">Память диалога — 1 час. Может управлять узлами, площадками, пользователями (кроме админов), секретами; создавать и изменять кастомные инструменты на базе существующих.</p>
+              <p class="eyebrow">AI-ассистент</p>
+              <h1>Гера</h1>
+              <p class="lead">Киберноид AIMon. Память диалога — 1 час. Управляет узлами, площадками, пользователями (кроме админов), секретами и кастомными инструментами.</p>
             </div>
             <button class="btn ghost" type="button" id="clearChat" title="Очистить память диалога">Очистить память</button>
           </div>
           <div class="assistant">
-            <div class="ai-hero">
-              <div class="ai-orb big" id="aiOrb"><span></span><span></span><span></span><i><svg><use href="#i-spark"/></svg></i></div>
+            <div class="gera hero" data-state="idle" id="geraHero">
+              <div class="gera-rings"><span></span><span></span><span></span></div>
+              <div class="gera-scan" aria-hidden="true"></div>
+              <div class="gera-face">
+                <img class="gera-img idle" src="assets/gera-idle.jpg" alt="Гера">
+                <img class="gera-img think" src="assets/gera-thinking.jpg" alt="">
+              </div>
+              <div class="gera-meta">
+                <b>Гера</b>
+                <span class="gera-status" id="geraStatus">Жду команду</span>
+              </div>
             </div>
             <div class="chat" id="chat">
-              <div class="msg bot"><div class="bubble">Здравствуйте! Могу добавить узлы, проверить ping/порт/SNMP, разобрать и поправить конфиги. Например: «проверь 10.0.0.1», «покажи edge-nginx.conf», «добавь сервер 10.0.0.5».</div></div>
+              <div class="msg bot">
+                <img class="msg-ava" src="assets/gera.jpg" alt="">
+                <div class="bubble">Здравствуйте! Я Гера. Могу добавить узлы, проверить ping/порт/SNMP, разобрать конфиги. Например: «проверь 10.0.0.1», «покажи типы устройств», «добавь сервер 10.0.0.5».</div>
+              </div>
             </div>
             <form class="chat-bar" id="chatForm">
-              <input id="chatInput" placeholder="Спросите ассистента…" autocomplete="off">
+              <input id="chatInput" placeholder="Команда для Геры…" autocomplete="off">
               <button class="btn primary icon" type="submit" aria-label="Отправить"><svg><use href="#i-send"/></svg></button>
             </form>
           </div>
@@ -372,7 +388,10 @@
   </div>
 
   <!-- Floating AI launcher -->
-  <button class="ai-fab" id="aiFab" aria-label="AI-ассистент"><span></span><svg><use href="#i-spark"/></svg></button>
+  <button class="ai-fab" id="aiFab" aria-label="Открыть Геру">
+    <img src="assets/gera.jpg" alt="Гера">
+    <span class="fab-ring"></span>
+  </button>
 
   <!-- Toast -->
   <div class="toast" id="toast" role="status" aria-live="polite"><svg><use href="#i-check"/></svg><p></p></div>
@@ -470,6 +489,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=ai-dtype1"></script>
+  <script src="app.js?v=gera1"></script>
 </body>
 </html>

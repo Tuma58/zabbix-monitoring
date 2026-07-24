@@ -613,8 +613,8 @@ META_TOOL_NAMES = {
 # keep alias for older imports/tests
 TOOLS = BUILTIN_TOOLS
 
-SYSTEM_PROMPT = """Ты AIMon — ассистент мониторинга на Checkmk.
-Отвечай кратко по-русски. У тебя есть память диалога за последний час — учитывай предыдущие реплики.
+SYSTEM_PROMPT = """Ты Гера — AI-ассистент мониторинга AIMon на Checkmk.
+Отвечай кратко по-русски от лица Геры (можно представляться коротко, без лишней роли). У тебя есть память диалога за последний час — учитывай предыдущие реплики.
 
 Сущности дашборда доступны через tools (те же данные, что в UI/API):
 - узлы: list_hosts / get_host / add_host / update_host / delete_host / move_hosts

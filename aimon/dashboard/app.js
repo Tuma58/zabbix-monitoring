@@ -799,10 +799,24 @@
     return id;
   }
 
+  /* ---------- Gera ---------- */
+  const GERA_AVA = 'assets/gera.jpg';
+  const GERA_WELCOME = 'Здравствуйте! Я Гера. Могу добавить узлы, проверить ping/порт/SNMP, разобрать конфиги. Например: «проверь 10.0.0.1», «покажи типы устройств», «добавь сервер 10.0.0.5».';
+
+  function setGeraState(state) {
+    const next = state === 'thinking' ? 'thinking' : 'idle';
+    $$('.gera').forEach((el) => { el.dataset.state = next; });
+    const status = $('#geraStatus');
+    if (status) status.textContent = next === 'thinking' ? 'Думаю…' : 'Жду команду';
+    const fab = $('#aiFab');
+    if (fab) fab.classList.toggle('thinking', next === 'thinking');
+  }
+
   function resetChatWelcome() {
     const chat = $('#chat');
     chat.innerHTML = '';
-    addMsg('Память очищена. Могу снова добавить узлы, проверить связь или разобрать конфиги.', 'bot');
+    addMsg(GERA_WELCOME, 'bot');
+    setGeraState('idle');
   }
 
   async function loadChatHistory() {
@@ -813,6 +827,7 @@
       const chat = $('#chat');
       chat.innerHTML = '';
       msgs.forEach((m) => addMsg(m.content || '', m.role === 'user' ? 'user' : 'bot'));
+      setGeraState('idle');
     } catch (_) { /* AI optional */ }
   }
 
@@ -833,13 +848,16 @@
     if (!text) return;
     addMsg(text, 'user');
     input.value = '';
-    const typing = addMsg('…', 'bot');
+    setGeraState('thinking');
+    const typing = addMsg('Гера думает…', 'bot', { thinking: true });
     try {
       const res = await api('/ai/chat', {
         method: 'POST',
         body: { message: text, session_id: sessionId() },
       });
       typing.textContent = res.reply || 'Готово.';
+      typing.parentElement?.classList.remove('thinking');
+      setGeraState('idle');
       const actions = Array.isArray(res.actions) ? res.actions : (res.action ? [res.action] : []);
       const mutated = actions.some((a) =>
         a && [
@@ -857,22 +875,31 @@
           .map((a) => a.result.host)
           .concat(...actions.filter((a) => a.tool === 'add_hosts_from_scan' && a.result?.ok).map((a) => a.result.added || []));
         const moved = actions.filter((a) => a.tool === 'move_hosts' && a.result?.ok).map((a) => a.result.count || 0);
-        if (added.length) toast(`AI добавил: ${added.join(', ')}`);
-        if (moved.length) toast(`AI перенёс узлов: ${moved.reduce((a, b) => a + b, 0)}`);
+        if (added.length) toast(`Гера добавила: ${added.join(', ')}`);
+        if (moved.length) toast(`Гера перенесла узлов: ${moved.reduce((a, b) => a + b, 0)}`);
         refresh();
       } else if (res.action || actions.length) {
         refresh();
       }
     } catch (e2) {
       typing.textContent = e2.status === 404
-        ? 'AI-сервис ещё не подключён. Скоро здесь появятся ответы DeepSeek.'
-        : (e2.message || 'Ошибка запроса к AI.');
+        ? 'Гера ещё не подключена к AI-сервису.'
+        : (e2.message || 'Ошибка запроса к Гере.');
+      typing.parentElement?.classList.remove('thinking');
+      setGeraState('idle');
     }
   });
 
-  function addMsg(text, who) {
+  function addMsg(text, who, opts = {}) {
     const wrap = document.createElement('div');
-    wrap.className = `msg ${who}`;
+    wrap.className = `msg ${who}${opts.thinking ? ' thinking' : ''}`;
+    if (who === 'bot') {
+      const ava = document.createElement('img');
+      ava.className = 'msg-ava';
+      ava.src = GERA_AVA;
+      ava.alt = 'Гера';
+      wrap.appendChild(ava);
+    }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.textContent = text;
