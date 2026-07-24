@@ -581,6 +581,7 @@ SYSTEM_PROMPT = """Ты AIMon — ассистент мониторинга на
 
 Правила:
 - Добавить/подключить узел → сразу add_host (есть IP — не переспрашивай). Если указана площадка — передай folder.
+- Скан сети → scan_network; добавление найденных → add_hosts_from_scan с folder, если пользователь назвал площадку. Имена и псевдонимы уже подготовлены сканом.
 - Массовый перенос узлов между площадками → move_hosts.
 - Изменить/удалить узел → update_host / delete_host; площадки → create_site / update_site / delete_site / list_sites.
 - MikroTik/свитч/роутер → type=snmp; сервер Linux/Windows → type=agent.
