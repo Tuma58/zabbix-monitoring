@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=hosts2">
+  <link rel="stylesheet" href="styles.css?v=hosts3">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -192,7 +192,8 @@
                     <th><button type="button" class="th-sort" data-sort="name">Узел<span class="sort-ind"></span></button></th>
                     <th><button type="button" class="th-sort" data-sort="address">Адрес<span class="sort-ind"></span></button></th>
                     <th><button type="button" class="th-sort" data-sort="site">Площадка<span class="sort-ind"></span></button></th>
-                    <th><button type="button" class="th-sort" data-sort="type">Тип<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="device_type">Тип устройства<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="type">Мониторинг<span class="sort-ind"></span></button></th>
                     <th><button type="button" class="th-sort" data-sort="state">Состояние<span class="sort-ind"></span></button></th>
                     <th class="need-write"></th>
                   </tr>
@@ -202,6 +203,19 @@
                     <th>
                       <select id="fHostSite">
                         <option value="">Все</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select id="fHostDevice">
+                        <option value="">Все</option>
+                        <option value="router">Роутер</option>
+                        <option value="switch">Коммутатор</option>
+                        <option value="ap">Точка доступа</option>
+                        <option value="printer">Принтер</option>
+                        <option value="server">Сервер</option>
+                        <option value="ups">ИБП</option>
+                        <option value="network">Сеть</option>
+                        <option value="host">Хост</option>
                       </select>
                     </th>
                     <th>
@@ -222,7 +236,7 @@
                     <th class="need-write"></th>
                   </tr>
                 </thead>
-                <tbody id="hostRows"><tr><td colspan="6" class="empty">Узлов пока нет.</td></tr></tbody>
+                <tbody id="hostRows"><tr><td colspan="7" class="empty">Узлов пока нет.</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -412,6 +426,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=hosts2"></script>
+  <script src="app.js?v=hosts3"></script>
 </body>
 </html>

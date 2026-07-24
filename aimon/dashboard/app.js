@@ -18,7 +18,7 @@
   let currentUser = null;
   let refreshTimer = null;
   let hostSort = { key: 'name', dir: 1 };
-  let hostFilters = { name: '', address: '', site: '', type: '', state: '' };
+  let hostFilters = { name: '', address: '', site: '', type: '', device: '', state: '' };
 
   function toast(message, ok = true) {
     const el = $('#toast');
@@ -170,6 +170,12 @@
   function stateClass(s) { return s === 'up' || s === 'ok' ? '' : s === 'warn' || s === 'degraded' ? 'warn' : 'down'; }
   function stateLabel(s) { return ({ up: 'Доступен', ok: 'Доступен', warn: 'Предупреждение', degraded: 'Предупреждение', down: 'Недоступен' })[s] || s; }
   function typeLabel(t) { return t === 'snmp' ? 'SNMP' : 'Агент'; }
+  function deviceLabel(h) {
+    return h.device_type_label || ({
+      printer: 'Принтер', ups: 'ИБП', ap: 'Точка доступа', router: 'Роутер',
+      switch: 'Коммутатор', server: 'Сервер', network: 'Сеть', host: 'Хост',
+    })[h.device_type] || h.device_type || 'Хост';
+  }
 
   function renderMetrics(sum) {
     $('#mHosts').textContent = sum.hosts_total ?? 0;
@@ -189,7 +195,7 @@
     const box = $('#hostMini');
     if (!hosts.length) { box.innerHTML = '<div class="empty">Пока нет узлов. Установите агент одной командой или просканируйте сеть.</div>'; return; }
     box.innerHTML = hosts.slice(0, 6).map((h) => `
-      <div class="row"><div><b>${esc(h.name)}</b><br><small>${esc(h.address || '')} · ${esc(h.site_title || h.folder || '/')} · ${esc(typeLabel(h.type))}</small></div>
+      <div class="row"><div><b>${esc(h.name)}</b><br><small>${esc(h.address || '')} · ${esc(deviceLabel(h))} · ${esc(typeLabel(h.type))}</small></div>
       <span class="state ${stateClass(h.state)} state-right">${stateLabel(h.state)}</span></div>`).join('');
   }
 
@@ -201,6 +207,7 @@
       if (f.address && !(h.address || '').toLowerCase().includes(f.address)) return false;
       const path = h.folder || h.site_path || '/';
       if (f.site && path !== f.site) return false;
+      if (f.device && (h.device_type || 'host') !== f.device) return false;
       if (f.type && (h.type || 'agent') !== f.type) return false;
       if (f.state) {
         const st = h.state === 'ok' ? 'up' : (h.state === 'degraded' ? 'warn' : h.state);
@@ -213,12 +220,14 @@
     list.sort((a, b) => {
       const va = (() => {
         if (key === 'site') return (a.site_title || a.folder || '').toLowerCase();
+        if (key === 'device_type') return deviceLabel(a).toLowerCase();
         if (key === 'type') return typeLabel(a.type || 'agent').toLowerCase();
         if (key === 'state') return stateLabel(a.state || '').toLowerCase();
         return String(a[key] || '').toLowerCase();
       })();
       const vb = (() => {
         if (key === 'site') return (b.site_title || b.folder || '').toLowerCase();
+        if (key === 'device_type') return deviceLabel(b).toLowerCase();
         if (key === 'type') return typeLabel(b.type || 'agent').toLowerCase();
         if (key === 'state') return stateLabel(b.state || '').toLowerCase();
         return String(b[key] || '').toLowerCase();
@@ -246,7 +255,7 @@
     const hosts = filteredHosts();
     updateSortIndicators();
     if (!hosts.length) {
-      tb.innerHTML = `<tr><td colspan="${write ? 6 : 5}" class="empty">${cache.hosts.length ? 'Нет узлов по фильтру.' : 'Узлов пока нет.'}</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="${write ? 7 : 6}" class="empty">${cache.hosts.length ? 'Нет узлов по фильтру.' : 'Узлов пока нет.'}</td></tr>`;
       return;
     }
     tb.innerHTML = hosts.map((h) => `
@@ -254,6 +263,7 @@
         <td><b>${esc(h.name)}</b>${h.alias ? `<br><small>${esc(h.alias)}</small>` : ''}</td>
         <td>${esc(h.address || '—')}</td>
         <td>${esc(h.site_title || h.folder || 'Корень')}</td>
+        <td><span class="type-pill device">${esc(deviceLabel(h))}</span></td>
         <td><span class="type-pill ${h.type === 'snmp' ? 'snmp' : 'agent'}">${esc(typeLabel(h.type))}</span></td>
         <td><span class="state ${stateClass(h.state)}">${stateLabel(h.state)}</span></td>
         ${write ? `<td><div class="row-actions">
@@ -805,6 +815,7 @@
       name: ($('#fHostName')?.value || '').trim().toLowerCase(),
       address: ($('#fHostAddr')?.value || '').trim().toLowerCase(),
       site: $('#fHostSite')?.value || '',
+      device: $('#fHostDevice')?.value || '',
       type: $('#fHostType')?.value || '',
       state: $('#fHostState')?.value || '',
     };
@@ -813,7 +824,7 @@
   ['fHostName', 'fHostAddr'].forEach((id) => {
     $(`#${id}`)?.addEventListener('input', syncHostFiltersFromUi);
   });
-  ['fHostSite', 'fHostType', 'fHostState'].forEach((id) => {
+  ['fHostSite', 'fHostDevice', 'fHostType', 'fHostState'].forEach((id) => {
     $(`#${id}`)?.addEventListener('change', syncHostFiltersFromUi);
   });
   $$('.th-sort').forEach((btn) => {

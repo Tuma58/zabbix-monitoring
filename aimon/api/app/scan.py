@@ -17,6 +17,27 @@ VENDOR_HINTS = {
     "linux": ["linux"],
 }
 
+# device class → needles in name/alias/sysDescr (order matters)
+DEVICE_TYPE_HINTS: list[tuple[str, list[str]]] = [
+    ("printer", ["printer", "laserjet", "laser jet", "mfp", "xerox", "brother", "canon", "epson", "kyocera"]),
+    ("ups", ["apc", "eaton", "ippon", "ups", "smart-ups"]),
+    ("ap", ["hapac", "hap_ac", "hap-ac", "access point", "wap", "cap ", "cape", "wifi", "wireless"]),
+    ("router", ["mikrotik", "routeros", "router", "ccr", " hex", "rb4", "rb5", "rb9", "edge router"]),
+    ("switch", ["cisco", "catalyst", "switch", "procurve", "d-link", "dlink", "tplink", "tp-link", "aruba"]),
+    ("server", ["dell", "proliant", "poweredge", "server", "windows", "linux", "ubuntu", "centos", "debian", "esxi"]),
+]
+
+DEVICE_TYPE_LABELS = {
+    "printer": "Принтер",
+    "ups": "ИБП",
+    "ap": "Точка доступа",
+    "router": "Роутер",
+    "switch": "Коммутатор",
+    "server": "Сервер",
+    "network": "Сеть",
+    "host": "Хост",
+}
+
 HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 
 
@@ -26,6 +47,21 @@ def guess_vendor(sysdescr: str) -> str:
         if any(n in low for n in needles):
             return vendor
     return ""
+
+
+def guess_device_type(*parts: str, monitor_type: str = "") -> str:
+    """Classify device kind from hostname / alias / sysDescr."""
+    blob = " ".join(str(p or "") for p in parts).lower().replace("_", " ").replace("-", " ")
+    for dtype, needles in DEVICE_TYPE_HINTS:
+        if any(n in blob for n in needles):
+            return dtype
+    if (monitor_type or "").lower() == "snmp":
+        return "network"
+    return "host"
+
+
+def device_type_label(device_type: str) -> str:
+    return DEVICE_TYPE_LABELS.get(device_type or "host", device_type or "Хост")
 
 
 def sanitize_hostname(name: str, fallback_ip: str = "") -> str:

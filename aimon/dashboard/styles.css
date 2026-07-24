@@ -185,6 +185,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   background: rgba(61,90,128,.1); color: var(--indigo);
 }
 .type-pill.snmp { background: rgba(193,122,108,.14); color: #9a5a4e; }
+.type-pill.device { background: rgba(122,158,126,.16); color: #4f6f53; }
 
 .state { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; }
 .state::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--green); }

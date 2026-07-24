@@ -7,6 +7,7 @@ from urllib.parse import quote
 import httpx
 
 from app.config import Settings
+from app.scan import device_type_label, guess_device_type, guess_vendor
 
 
 def folder_path_to_id(path: str) -> str:
@@ -190,16 +191,22 @@ class CheckmkClient:
             folder = ext.get("folder") or "/"
             snmp_tag = str(attrs.get("tag_snmp_ds") or "")
             host_type = "snmp" if snmp_tag.startswith("snmp") else "agent"
+            name = item.get("id")
+            alias = attrs.get("alias", "") or ""
+            dtype = guess_device_type(str(name or ""), alias, monitor_type=host_type)
             out.append(
                 {
-                    "name": item.get("id"),
+                    "name": name,
                     "address": attrs.get("ipaddress", ""),
                     "type": host_type,
+                    "device_type": dtype,
+                    "device_type_label": device_type_label(dtype),
+                    "vendor": guess_vendor(alias) or guess_vendor(str(name or "")),
                     "folder": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
                     "site_path": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
                     "state": "up",
                     "services": 0,
-                    "alias": attrs.get("alias", ""),
+                    "alias": alias,
                 }
             )
         return out
@@ -215,12 +222,18 @@ class CheckmkClient:
         folder = ext.get("folder") or "/"
         snmp_tag = str(attrs.get("tag_snmp_ds") or "")
         host_type = "snmp" if snmp_tag.startswith("snmp") else "agent"
+        name = item.get("id")
+        alias = attrs.get("alias", "") or ""
+        dtype = guess_device_type(str(name or ""), alias, monitor_type=host_type)
         return {
-            "name": item.get("id"),
+            "name": name,
             "address": attrs.get("ipaddress", ""),
             "type": host_type,
+            "device_type": dtype,
+            "device_type_label": device_type_label(dtype),
+            "vendor": guess_vendor(alias) or guess_vendor(str(name or "")),
             "folder": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
-            "alias": attrs.get("alias", ""),
+            "alias": alias,
             "attributes": attrs,
             "etag": resp.headers.get("ETag") or resp.headers.get("etag") or "*",
         }
