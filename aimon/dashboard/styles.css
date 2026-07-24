@@ -438,8 +438,17 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gera-face, .gera-rings span, .gera-scan, .gera-status::before, .ai-fab .fab-ring {
+  .gera-rings span, .gera-scan, .gera-status::before, .ai-fab .fab-ring {
     animation: none !important;
+  }
+  .gera-vid { display: none !important; }
+  .gera-face::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: center / cover no-repeat url("assets/gera-idle.jpg");
+  }
+  .gera[data-state="thinking"] .gera-face::after {
+    background-image: url("assets/gera-thinking.jpg");
   }
 }
 
