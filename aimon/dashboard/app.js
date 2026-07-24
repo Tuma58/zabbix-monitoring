@@ -805,12 +805,52 @@
 
   function setGeraState(state) {
     const next = state === 'thinking' ? 'thinking' : 'idle';
-    $$('.gera').forEach((el) => { el.dataset.state = next; });
+    $$('.gera').forEach((el) => {
+      el.dataset.state = next;
+      const idle = $('.gera-vid.idle', el);
+      const think = $('.gera-vid.think', el);
+      if (idle && think) {
+        if (next === 'thinking') {
+          try { idle.pause(); } catch (_) {}
+          think.currentTime = 0;
+          const p = think.play();
+          if (p && p.catch) p.catch(() => {});
+        } else {
+          try { think.pause(); } catch (_) {}
+          idle.currentTime = 0;
+          const p = idle.play();
+          if (p && p.catch) p.catch(() => {});
+        }
+      }
+    });
     const status = $('#geraStatus');
     if (status) status.textContent = next === 'thinking' ? 'Думаю…' : 'Жду команду';
     const fab = $('#aiFab');
-    if (fab) fab.classList.toggle('thinking', next === 'thinking');
+    if (fab) {
+      fab.classList.toggle('thinking', next === 'thinking');
+      const img = $('img', fab);
+      if (img) {
+        const want = next === 'thinking' ? 'assets/gera-thinking.webp' : 'assets/gera-idle.webp';
+        if (!img.src.endsWith(want.split('/').pop())) img.src = want;
+      }
+    }
   }
+
+  // Start idle loops when the assistant view is shown / page loads
+  function bootGeraVideos() {
+    $$('.gera-vid.idle').forEach((v) => {
+      const p = v.play();
+      if (p && p.catch) p.catch(() => {});
+    });
+  }
+  bootGeraVideos();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      $$('.gera-vid').forEach((v) => { try { v.pause(); } catch (_) {} });
+    } else {
+      setGeraState($('#geraHero')?.dataset.state || 'idle');
+    }
+  });
 
   function resetChatWelcome() {
     const chat = $('#chat');

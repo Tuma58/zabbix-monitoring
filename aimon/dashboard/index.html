@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=gera1">
+  <link rel="stylesheet" href="styles.css?v=gera2">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -152,8 +152,14 @@
               <div class="gera mini" data-state="idle" id="geraMini" aria-hidden="true">
                 <div class="gera-rings"><span></span><span></span><span></span></div>
                 <div class="gera-face">
-                  <img class="gera-img idle" src="assets/gera-idle.jpg" alt="">
-                  <img class="gera-img think" src="assets/gera-thinking.jpg" alt="">
+                  <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="metadata">
+                    <source src="assets/gera-idle.webm" type="video/webm">
+                    <source src="assets/gera-idle.mp4" type="video/mp4">
+                  </video>
+                  <video class="gera-vid think" poster="assets/gera-thinking.jpg" muted loop playsinline preload="metadata">
+                    <source src="assets/gera-thinking.webm" type="video/webm">
+                    <source src="assets/gera-thinking.mp4" type="video/mp4">
+                  </video>
                 </div>
               </div>
               <p class="ai-hint">Гера ждёт команду: «добавь микротик 10.0.0.1», «что сломалось», «типы устройств».</p>
@@ -328,8 +334,14 @@
               <div class="gera-rings"><span></span><span></span><span></span></div>
               <div class="gera-scan" aria-hidden="true"></div>
               <div class="gera-face">
-                <img class="gera-img idle" src="assets/gera-idle.jpg" alt="Гера">
-                <img class="gera-img think" src="assets/gera-thinking.jpg" alt="">
+                <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="auto" aria-label="Гера">
+                  <source src="assets/gera-idle.webm" type="video/webm">
+                  <source src="assets/gera-idle.mp4" type="video/mp4">
+                </video>
+                <video class="gera-vid think" poster="assets/gera-thinking.jpg" muted loop playsinline preload="auto">
+                  <source src="assets/gera-thinking.webm" type="video/webm">
+                  <source src="assets/gera-thinking.mp4" type="video/mp4">
+                </video>
               </div>
               <div class="gera-meta">
                 <b>Гера</b>
@@ -389,7 +401,7 @@
 
   <!-- Floating AI launcher -->
   <button class="ai-fab" id="aiFab" aria-label="Открыть Геру">
-    <img src="assets/gera.jpg" alt="Гера">
+    <img src="assets/gera-idle.webp" alt="Гера">
     <span class="fab-ring"></span>
   </button>
 
@@ -489,6 +501,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=gera1"></script>
+  <script src="app.js?v=gera2"></script>
 </body>
 </html>

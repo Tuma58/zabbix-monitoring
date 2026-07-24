@@ -255,27 +255,31 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
     0 0 0 3px rgba(61, 184, 197, 0.35),
     0 18px 40px -16px rgba(26, 34, 40, 0.55);
   background: #0d1418;
-  animation: gera-breathe 4.8s ease-in-out infinite;
 }
 .gera.mini .gera-face { width: 96px; height: 96px; }
+.gera-vid,
 .gera-img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: opacity .55s ease, transform .8s ease;
+  transition: opacity .45s ease;
+  pointer-events: none;
 }
-.gera-img.idle { opacity: 1; transform: scale(1.02); }
-.gera-img.think { opacity: 0; transform: scale(1.06); }
-.gera[data-state="thinking"] .gera-img.idle { opacity: 0; transform: scale(1.05); }
-.gera[data-state="thinking"] .gera-img.think { opacity: 1; transform: scale(1.02); }
+.gera-vid.idle,
+.gera-img.idle { opacity: 1; z-index: 1; }
+.gera-vid.think,
+.gera-img.think { opacity: 0; z-index: 0; }
+.gera[data-state="thinking"] .gera-vid.idle,
+.gera[data-state="thinking"] .gera-img.idle { opacity: 0; z-index: 0; }
+.gera[data-state="thinking"] .gera-vid.think,
+.gera[data-state="thinking"] .gera-img.think { opacity: 1; z-index: 1; }
 .gera[data-state="thinking"] .gera-face {
   box-shadow:
     0 0 0 3px rgba(122, 212, 222, 0.55),
     0 0 28px rgba(61, 184, 197, 0.45),
     0 18px 40px -16px rgba(26, 34, 40, 0.55);
-  animation: gera-think-pulse 1.4s ease-in-out infinite;
 }
 
 .gera-rings { position: absolute; inset: 50% auto auto 50%; width: 0; height: 0; z-index: 1; pointer-events: none; }
