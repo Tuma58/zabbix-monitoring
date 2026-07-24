@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=gera3">
+  <link rel="stylesheet" href="styles.css?v=gera4">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -149,18 +149,33 @@
 
             <section class="card ai-card">
               <div class="card-head"><h2>Гера</h2><span class="badge">AI-ассистент</span></div>
-              <div class="gera mini" data-state="idle" id="geraMini" aria-hidden="true">
-                <div class="gera-rings"><span></span><span></span><span></span></div>
-                <div class="gera-face">
-                  <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="metadata">
-                    <source src="assets/gera-idle.webm" type="video/webm">
-                    <source src="assets/gera-idle.mp4" type="video/mp4">
-                  </video>
-                  <video class="gera-vid think" poster="assets/gera-thinking.jpg" muted loop playsinline preload="metadata">
-                    <source src="assets/gera-thinking.webm" type="video/webm">
-                    <source src="assets/gera-thinking.mp4" type="video/mp4">
-                  </video>
+              <div class="gera-overview" data-goto="assistant" role="button" tabindex="0" title="Открыть чат с Герой">
+                <picture>
+                  <source srcset="assets/gera-overview.webp" type="image/webp">
+                  <img
+                    class="gera-overview-img"
+                    src="assets/gera-overview.jpg"
+                    alt="Гера — AI-ассистент AIMon"
+                    width="600"
+                    height="900"
+                    loading="lazy"
+                    decoding="async"
+                  >
+                </picture>
+                <div class="gera mini gera-overview-status" data-state="idle" id="geraMini" aria-hidden="true">
+                  <div class="gera-rings"><span></span><span></span><span></span></div>
+                  <div class="gera-face">
+                    <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="metadata">
+                      <source src="assets/gera-idle.webm" type="video/webm">
+                      <source src="assets/gera-idle.mp4" type="video/mp4">
+                    </video>
+                    <video class="gera-vid think" poster="assets/gera-thinking.jpg" muted loop playsinline preload="metadata">
+                      <source src="assets/gera-thinking.webm" type="video/webm">
+                      <source src="assets/gera-thinking.mp4" type="video/mp4">
+                    </video>
+                  </div>
                 </div>
+                <span class="gera-overview-caption" id="geraOverviewStatus">Жду команду</span>
               </div>
               <p class="ai-hint">Гера ждёт команду: «добавь микротик 10.0.0.1», «что сломалось», «типы устройств».</p>
               <button class="btn primary wide" data-goto="assistant">Открыть чат с Герой</button>
@@ -501,6 +516,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=gera3"></script>
+  <script src="app.js?v=gera4"></script>
 </body>
 </html>
