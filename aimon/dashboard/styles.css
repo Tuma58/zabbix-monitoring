@@ -31,6 +31,9 @@
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 
+/* Author display rules must not override the HTML hidden attribute */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -253,6 +256,9 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   place-items: center;
   padding: 24px;
 }
+body:not(.authed) #appShell { display: none !important; }
+body.authed #loginGate { display: none !important; }
+body:not(.authed) .ai-fab { display: none !important; }
 .login-card {
   width: min(400px, 100%);
   display: grid;

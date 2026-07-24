@@ -94,17 +94,17 @@
     clearInterval(refreshTimer);
     refreshTimer = null;
     body.classList.remove('authed', 'can-write', 'can-sites', 'can-ai');
-    $('#appShell').hidden = true;
-    $('#loginGate').hidden = false;
+    if ($('#appShell')) $('#appShell').hidden = true;
+    if ($('#loginGate')) $('#loginGate').hidden = false;
     if ($('#aiFab')) $('#aiFab').hidden = true;
-    $('#loginPass').value = '';
-    $('#loginError').hidden = true;
+    if ($('#loginPass')) $('#loginPass').value = '';
+    if ($('#loginError')) $('#loginError').hidden = true;
     $('#loginUser')?.focus();
   }
 
   function enterApp() {
-    $('#loginGate').hidden = true;
-    $('#appShell').hidden = false;
+    if ($('#loginGate')) $('#loginGate').hidden = true;
+    if ($('#appShell')) $('#appShell').hidden = false;
     body.classList.add('authed');
     applyPermissions();
     let view = location.hash.slice(1) || 'overview';
