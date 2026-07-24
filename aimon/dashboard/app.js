@@ -524,6 +524,7 @@
           address: bodyPayload.address,
           alias: bodyPayload.alias,
           type: bodyPayload.type,
+          device_type: bodyPayload.device_type || '',
           folder: bodyPayload.folder,
           snmp_profile_id: bodyPayload.snmp_profile_id,
         };
