@@ -27,11 +27,30 @@
     <symbol id="i-net" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="8" rx="2"/><path d="M7 14h.01M11 14h.01M16 14h2M12 10V4M8 4h8"/></symbol>
     <symbol id="i-site" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M4 20h16"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m14 6 4 4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M16 12H8M16 12l-3-3M16 12l-3 3"/></symbol>
   </svg>
 
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
 
-  <div class="shell">
+  <!-- Login -->
+  <div class="login-gate" id="loginGate" hidden>
+    <form class="login-card" id="loginForm">
+      <div class="login-brand">
+        <span class="brand-mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10.2"/></svg></span>
+        <div>
+          <strong>AIMon</strong>
+          <small>Вход в панель мониторинга</small>
+        </div>
+      </div>
+      <label class="field"><span>Логин</span><input id="loginUser" name="username" autocomplete="username" required autofocus></label>
+      <label class="field"><span>Пароль</span><input id="loginPass" name="password" type="password" autocomplete="current-password" required></label>
+      <p class="login-error" id="loginError" hidden></p>
+      <button class="btn primary wide" type="submit" id="loginSubmit">Войти</button>
+    </form>
+  </div>
+
+  <div class="shell" id="appShell" hidden>
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="brand">
@@ -41,13 +60,13 @@
       </div>
 
       <nav class="nav" aria-label="Основная навигация">
-        <a class="nav-item active" data-view="overview" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
-        <a class="nav-item" data-view="sites" href="#sites"><svg><use href="#i-site"/></svg><span>Площадки</span><b id="navSites">0</b></a>
-        <a class="nav-item" data-view="hosts" href="#hosts"><svg><use href="#i-server"/></svg><span>Узлы</span><b id="navHosts">0</b></a>
-        <a class="nav-item" data-view="scan" href="#scan"><svg><use href="#i-radar"/></svg><span>Скан сети</span></a>
-        <a class="nav-item" data-view="secrets" href="#secrets"><svg><use href="#i-key"/></svg><span>Секреты</span></a>
-        <a class="nav-item" data-view="assistant" href="#assistant"><svg><use href="#i-spark"/></svg><span>AI-ассистент</span></a>
-        <a class="nav-item" data-view="settings" href="#settings"><svg><use href="#i-cog"/></svg><span>Настройки</span></a>
+        <a class="nav-item active" data-view="overview" data-cap="hosts_read" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
+        <a class="nav-item" data-view="sites" data-cap="hosts_read" href="#sites"><svg><use href="#i-site"/></svg><span>Площадки</span><b id="navSites">0</b></a>
+        <a class="nav-item" data-view="hosts" data-cap="hosts_read" href="#hosts"><svg><use href="#i-server"/></svg><span>Узлы</span><b id="navHosts">0</b></a>
+        <a class="nav-item" data-view="scan" data-cap="scan" href="#scan"><svg><use href="#i-radar"/></svg><span>Скан сети</span></a>
+        <a class="nav-item" data-view="secrets" data-cap="secrets" href="#secrets"><svg><use href="#i-key"/></svg><span>Секреты</span></a>
+        <a class="nav-item" data-view="assistant" data-cap="ai" href="#assistant"><svg><use href="#i-spark"/></svg><span>AI-ассистент</span></a>
+        <a class="nav-item" data-view="settings" data-cap="settings" href="#settings"><svg><use href="#i-cog"/></svg><span>Настройки</span></a>
       </nav>
 
       <div class="side-status">
@@ -70,7 +89,15 @@
         </div>
         <div class="topbar-actions">
           <span class="sync" id="sync"><span class="dot"></span>Ожидание API</span>
-          <button class="btn primary" id="quickAdd"><svg><use href="#i-plus"/></svg><span class="hide-xs">Добавить узел</span></button>
+          <button class="btn primary need-write" id="quickAdd"><svg><use href="#i-plus"/></svg><span class="hide-xs">Добавить узел</span></button>
+          <div class="user-chip" id="userChip">
+            <svg><use href="#i-user"/></svg>
+            <div>
+              <strong id="userName">—</strong>
+              <small id="userRole">—</small>
+            </div>
+            <button class="btn ghost" type="button" id="logoutBtn" title="Выйти"><svg><use href="#i-logout"/></svg></button>
+          </div>
         </div>
       </header>
 
@@ -139,7 +166,7 @@
               <h1>Площадки мониторинга</h1>
               <p class="lead">Группировка узлов по площадкам (папки Checkmk): офис, ЦОД, филиал.</p>
             </div>
-            <button class="btn primary" id="addSite"><svg><use href="#i-plus"/></svg>Новая площадка</button>
+            <button class="btn primary need-sites" id="addSite"><svg><use href="#i-plus"/></svg>Новая площадка</button>
           </div>
           <div class="card">
             <div class="table-wrap">
@@ -155,7 +182,7 @@
         <section class="view" data-view="hosts">
           <div class="page-head">
             <div><p class="eyebrow">Каталог</p><h1>Узлы мониторинга</h1><p class="lead">Все хосты Checkmk: агенты и SNMP-устройства.</p></div>
-            <button class="btn primary" id="addHost"><svg><use href="#i-plus"/></svg>Добавить узел</button>
+            <button class="btn primary need-write" id="addHost"><svg><use href="#i-plus"/></svg>Добавить узел</button>
           </div>
           <div class="card">
             <div class="table-wrap">
@@ -232,12 +259,29 @@
 
         <!-- Settings -->
         <section class="view" data-view="settings">
-          <div class="page-head"><div><p class="eyebrow">Система</p><h1>Настройки</h1><p class="lead">Подключение к Checkmk и деплой.</p></div></div>
+          <div class="page-head"><div><p class="eyebrow">Система</p><h1>Настройки</h1><p class="lead">Подключение к Checkmk, пользователи и роли.</p></div></div>
+
+          <div class="card" id="usersCard" hidden>
+            <div class="card-head">
+              <h2>Пользователи</h2>
+              <button class="btn primary" type="button" id="addUser"><svg><use href="#i-plus"/></svg>Добавить</button>
+            </div>
+            <p class="lead" style="margin:0 0 14px">Администратор — полный доступ. Инженер — узлы и площадки. Пользователь — только назначенные узлы.</p>
+            <div class="table-wrap">
+              <table class="tbl" id="userTable">
+                <thead><tr><th>Пользователь</th><th>Роль</th><th>Узлы</th><th>Статус</th><th></th></tr></thead>
+                <tbody id="userRows"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="card">
+            <div class="card-head"><h2>Система</h2></div>
             <dl class="kv">
               <div><dt>Движок сбора</dt><dd>Checkmk Raw</dd></div>
               <div><dt>Backend API</dt><dd id="setApi">/api/v1</dd></div>
               <div><dt>Статус Checkmk</dt><dd id="setEngine">проверка…</dd></div>
+              <div><dt>Текущий пользователь</dt><dd id="setUser">—</dd></div>
             </dl>
             <div class="cmd">
               <p>Установка агента (одна команда):</p>
@@ -298,6 +342,38 @@
       <footer class="modal-foot">
         <button type="button" class="btn ghost" id="siteModalCancel">Отмена</button>
         <button type="submit" class="btn primary" id="siteModalSave">Сохранить</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- User modal -->
+  <dialog class="modal" id="userModal">
+    <form method="dialog" id="userForm" class="modal-panel">
+      <header class="modal-head">
+        <h2 id="userModalTitle">Пользователь</h2>
+        <button type="button" class="icon-btn" id="userModalClose" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="modal-body">
+        <input type="hidden" id="userEditId" value="">
+        <label class="field"><span>Логин</span><input id="userUsername" required autocomplete="off" pattern="[A-Za-z0-9_.-]{2,40}"></label>
+        <label class="field"><span>Отображаемое имя</span><input id="userDisplayName" autocomplete="off"></label>
+        <label class="field"><span>Роль</span>
+          <select id="userRoleSelect">
+            <option value="user">Пользователь</option>
+            <option value="engineer">Инженер</option>
+            <option value="admin">Администратор</option>
+          </select>
+        </label>
+        <label class="field"><span>Пароль</span><input id="userPassword" type="password" autocomplete="new-password" placeholder="минимум 6 символов"></label>
+        <label class="field check"><input type="checkbox" id="userEnabled" checked><span>Учётная запись активна</span></label>
+        <div class="field" id="userHostsWrap">
+          <span>Доступные узлы (для роли «Пользователь»)</span>
+          <div class="host-checks" id="userHosts"></div>
+        </div>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" id="userModalCancel">Отмена</button>
+        <button type="submit" class="btn primary" id="userModalSave">Сохранить</button>
       </footer>
     </form>
   </dialog>

@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # Managed config files root (mounted / shared with host configs)
     config_root: str = "/data/configs"
 
+    # Auth
+    auth_token_ttl_seconds: int = 604800  # 7 days
+    aimon_admin_username: str = "admin"
+    aimon_admin_password: str = "AdminChangeMe!"
+
     cors_origins: str = "*"
 
     @property

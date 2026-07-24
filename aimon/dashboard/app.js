@@ -2,12 +2,21 @@
   'use strict';
 
   const API = '/api/v1';
+  const TOKEN_KEY = 'aimon_token';
+  const USER_KEY = 'aimon_user';
+  const CAPS = {
+    admin: new Set(['users', 'hosts_read', 'hosts_write', 'sites', 'scan', 'secrets', 'ai', 'settings', 'agents_token']),
+    engineer: new Set(['hosts_read', 'hosts_write', 'sites', 'scan', 'secrets', 'ai', 'settings', 'agents_token']),
+    user: new Set(['hosts_read']),
+  };
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const body = document.body;
 
   let toastTimer;
-  let cache = { hosts: [], sites: [], secrets: [] };
+  let cache = { hosts: [], sites: [], secrets: [], users: [] };
+  let currentUser = null;
+  let refreshTimer = null;
 
   function toast(message, ok = true) {
     const el = $('#toast');
@@ -18,14 +27,42 @@
     toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
   }
 
+  function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+  function can(cap) {
+    const role = currentUser?.role || 'user';
+    return (CAPS[role] || CAPS.user).has(cap);
+  }
+
+  function setSession(token, user) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    currentUser = user;
+  }
+
+  function clearSession() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    currentUser = null;
+  }
+
   async function api(path, options = {}) {
     const headers = { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${API}${path}`, { ...options, headers, body: options.body ? JSON.stringify(options.body) : undefined });
     const text = await res.text();
     let data = null;
     if (text) { try { data = JSON.parse(text); } catch { data = { message: text }; } }
+    if (res.status === 401 && !path.startsWith('/auth/login')) {
+      logout(false);
+      const err = new Error('Требуется авторизация');
+      err.status = 401;
+      throw err;
+    }
     if (!res.ok) {
-      const err = new Error(data?.detail || data?.message || `HTTP ${res.status}`);
+      const detail = data?.detail;
+      const msg = typeof detail === 'string' ? detail : (detail?.msg || data?.message || `HTTP ${res.status}`);
+      const err = new Error(msg);
       err.status = res.status;
       err.payload = data;
       throw err;
@@ -35,12 +72,66 @@
 
   function esc(v) { const d = document.createElement('span'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
 
+  function applyPermissions() {
+    const role = currentUser?.role || 'user';
+    body.classList.toggle('can-write', can('hosts_write'));
+    body.classList.toggle('can-sites', can('sites'));
+    body.classList.toggle('can-ai', can('ai'));
+    body.dataset.role = role;
+    $$('.nav-item[data-cap]').forEach((n) => {
+      n.hidden = !can(n.dataset.cap);
+    });
+    const name = currentUser?.display_name || currentUser?.username || '—';
+    const roleLabel = currentUser?.role_label || role;
+    if ($('#userName')) $('#userName').textContent = name;
+    if ($('#userRole')) $('#userRole').textContent = roleLabel;
+    if ($('#setUser')) $('#setUser').textContent = `${name} · ${roleLabel}`;
+    if ($('#usersCard')) $('#usersCard').hidden = !can('users');
+    if ($('#aiFab')) $('#aiFab').hidden = !can('ai');
+  }
+
+  function showLogin() {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+    body.classList.remove('authed', 'can-write', 'can-sites', 'can-ai');
+    $('#appShell').hidden = true;
+    $('#loginGate').hidden = false;
+    if ($('#aiFab')) $('#aiFab').hidden = true;
+    $('#loginPass').value = '';
+    $('#loginError').hidden = true;
+    $('#loginUser')?.focus();
+  }
+
+  function enterApp() {
+    $('#loginGate').hidden = true;
+    $('#appShell').hidden = false;
+    body.classList.add('authed');
+    applyPermissions();
+    let view = location.hash.slice(1) || 'overview';
+    const nav = $(`.nav-item[data-view="${view}"]`);
+    if (!nav || nav.hidden) view = 'overview';
+    showView(view);
+    refresh();
+    if (can('ai')) loadChatHistory();
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(refresh, 30000);
+  }
+
+  function logout(showToast = true) {
+    clearSession();
+    showLogin();
+    if (showToast) toast('Вы вышли из системы');
+  }
+
   /* ---------- Navigation ---------- */
   function showView(name) {
+    const nav = $(`.nav-item[data-view="${name}"]`);
+    if (nav?.hidden) name = 'overview';
     $$('.view').forEach((v) => v.classList.toggle('active', v.dataset.view === name));
     $$('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.view === name));
     body.classList.remove('nav-open');
     if (location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
+    if (name === 'settings' && can('users')) loadUsers();
   }
   $$('.nav-item').forEach((n) => n.addEventListener('click', (e) => { e.preventDefault(); showView(n.dataset.view); }));
   $$('[data-goto]').forEach((b) => b.addEventListener('click', () => showView(b.dataset.goto)));
@@ -50,6 +141,28 @@
   $('#navClose')?.addEventListener('click', () => body.classList.remove('nav-open'));
   $('#scrim')?.addEventListener('click', () => body.classList.remove('nav-open'));
   $('#aiFab')?.addEventListener('click', () => { showView('assistant'); $('#chatInput')?.focus(); });
+  $('#logoutBtn')?.addEventListener('click', () => logout(true));
+
+  /* ---------- Login ---------- */
+  $('#loginForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = $('#loginUser').value.trim();
+    const password = $('#loginPass').value;
+    const errEl = $('#loginError');
+    errEl.hidden = true;
+    $('#loginSubmit').disabled = true;
+    try {
+      const res = await api('/auth/login', { method: 'POST', body: { username, password } });
+      setSession(res.token, res.user);
+      enterApp();
+      toast(`Добро пожаловать, ${res.user.display_name || res.user.username}`);
+    } catch (err) {
+      errEl.textContent = err.message || 'Неверный логин или пароль';
+      errEl.hidden = false;
+    } finally {
+      $('#loginSubmit').disabled = false;
+    }
+  });
 
   /* ---------- Data rendering ---------- */
   function stateClass(s) { return s === 'up' || s === 'ok' ? '' : s === 'warn' || s === 'degraded' ? 'warn' : 'down'; }
@@ -79,7 +192,8 @@
 
   function renderHostTable(hosts) {
     const tb = $('#hostRows');
-    if (!hosts.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">Узлов пока нет.</td></tr>'; return; }
+    const write = can('hosts_write');
+    if (!hosts.length) { tb.innerHTML = `<tr><td colspan="${write ? 6 : 5}" class="empty">Узлов пока нет.</td></tr>`; return; }
     tb.innerHTML = hosts.map((h) => `
       <tr>
         <td><b>${esc(h.name)}</b>${h.alias ? `<br><small>${esc(h.alias)}</small>` : ''}</td>
@@ -87,36 +201,39 @@
         <td>${esc(h.site_title || h.folder || 'Корень')}</td>
         <td>${esc(h.type || 'agent')}</td>
         <td><span class="state ${stateClass(h.state)}">${stateLabel(h.state)}</span></td>
-        <td><div class="row-actions">
+        ${write ? `<td><div class="row-actions">
           <button class="btn ghost" type="button" data-edit-host="${esc(h.name)}"><svg><use href="#i-edit"/></svg>Изменить</button>
           <button class="btn ghost" type="button" data-del-host="${esc(h.name)}">Удалить</button>
-        </div></td>
+        </div></td>` : ''}
       </tr>`).join('');
-    $$('[data-edit-host]', tb).forEach((b) => b.addEventListener('click', () => openHostModal(b.dataset.editHost)));
-    $$('[data-del-host]', tb).forEach((b) => b.addEventListener('click', () => deleteHost(b.dataset.delHost)));
+    if (write) {
+      $$('[data-edit-host]', tb).forEach((b) => b.addEventListener('click', () => openHostModal(b.dataset.editHost)));
+      $$('[data-del-host]', tb).forEach((b) => b.addEventListener('click', () => deleteHost(b.dataset.delHost)));
+    }
   }
 
   function renderSites(sites) {
     const tb = $('#siteRows');
     const countEl = $('#navSites');
-    const real = (sites || []).filter((s) => s.path !== '/' || true);
-    if (countEl) countEl.textContent = Math.max(0, real.length - (real.some((s) => s.path === '/') ? 0 : 0));
+    const write = can('sites');
     if (countEl) countEl.textContent = String((sites || []).length);
-    if (!sites.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">Площадок пока нет.</td></tr>'; return; }
+    if (!sites.length) { tb.innerHTML = `<tr><td colspan="${write ? 4 : 3}" class="empty">Площадок пока нет.</td></tr>`; return; }
     tb.innerHTML = sites.map((s) => {
       const isRoot = s.path === '/' || s.id === '~';
       return `<tr>
         <td><b>${esc(s.title || s.name || 'Корень')}</b>${isRoot ? '<br><small>корневая</small>' : ''}</td>
         <td><code>${esc(s.path || '/')}</code></td>
         <td>${s.hosts_count ?? 0}</td>
-        <td><div class="row-actions">
+        ${write ? `<td><div class="row-actions">
           ${isRoot ? '' : `<button class="btn ghost" type="button" data-edit-site="${esc(s.id)}"><svg><use href="#i-edit"/></svg>Изменить</button>
           <button class="btn ghost" type="button" data-del-site="${esc(s.id)}">Удалить</button>`}
-        </div></td>
+        </div></td>` : ''}
       </tr>`;
     }).join('');
-    $$('[data-edit-site]', tb).forEach((b) => b.addEventListener('click', () => openSiteModal(b.dataset.editSite)));
-    $$('[data-del-site]', tb).forEach((b) => b.addEventListener('click', () => deleteSite(b.dataset.delSite)));
+    if (write) {
+      $$('[data-edit-site]', tb).forEach((b) => b.addEventListener('click', () => openSiteModal(b.dataset.editSite)));
+      $$('[data-del-site]', tb).forEach((b) => b.addEventListener('click', () => deleteSite(b.dataset.delSite)));
+    }
   }
 
   function fillSiteSelect(sel, selected) {
@@ -141,6 +258,7 @@
       const snmp = items.filter((s) => s.kind === 'snmp_v2c' || s.kind === 'snmp_v3');
       sel.innerHTML = '<option value="">Выберите профиль</option>' + snmp.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
     }
+    if (!box) return;
     if (!items.length) { box.innerHTML = '<div class="empty">Секретов пока нет.</div>'; return; }
     const label = { snmp_v2c: 'SNMP v2c', snmp_v3: 'SNMP v3', agent_token: 'Токен агента', checkmk_automation: 'Checkmk automation' };
     box.innerHTML = items.map((s) => `
@@ -150,31 +268,69 @@
       </div>`).join('');
   }
 
+  function renderUsers(users) {
+    const tb = $('#userRows');
+    if (!tb) return;
+    if (!users.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">Пользователей пока нет.</td></tr>'; return; }
+    tb.innerHTML = users.map((u) => {
+      const hosts = (u.hosts || []).join(', ') || (u.role === 'user' ? '—' : 'все');
+      return `<tr>
+        <td><b>${esc(u.display_name || u.username)}</b><br><small>${esc(u.username)}</small></td>
+        <td>${esc(u.role_label || u.role)}</td>
+        <td>${esc(hosts)}</td>
+        <td><span class="state ${u.enabled ? '' : 'down'}">${u.enabled ? 'Активен' : 'Отключён'}</span></td>
+        <td><div class="row-actions">
+          <button class="btn ghost" type="button" data-edit-user="${esc(u.id)}"><svg><use href="#i-edit"/></svg>Изменить</button>
+          <button class="btn ghost" type="button" data-del-user="${esc(u.id)}">Удалить</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+    $$('[data-edit-user]', tb).forEach((b) => b.addEventListener('click', () => openUserModal(b.dataset.editUser)));
+    $$('[data-del-user]', tb).forEach((b) => b.addEventListener('click', () => deleteUser(b.dataset.delUser)));
+  }
+
   /* ---------- Load ---------- */
   async function refresh() {
+    if (!getToken() || !currentUser) return;
     try {
-      const [sum, hosts, secrets, sites] = await Promise.all([
+      const tasks = [
         api('/summary').catch(() => ({})),
         api('/hosts').catch(() => []),
-        api('/secrets').catch(() => []),
         api('/sites').catch(() => []),
-      ]);
-      cache.hosts = hosts || [];
-      cache.secrets = secrets || [];
-      cache.sites = sites || [];
-      renderMetrics(sum || {});
+      ];
+      if (can('secrets')) tasks.push(api('/secrets').catch(() => []));
+      const results = await Promise.all(tasks);
+      const sum = results[0] || {};
+      const hosts = results[1] || [];
+      const sites = results[2] || [];
+      const secrets = can('secrets') ? (results[3] || []) : [];
+      cache.hosts = hosts;
+      cache.sites = sites;
+      cache.secrets = secrets;
+      renderMetrics(sum);
       renderHostMini(cache.hosts);
       renderHostTable(cache.hosts);
       renderSites(cache.sites);
-      renderSecrets(cache.secrets);
+      if (can('secrets')) renderSecrets(cache.secrets);
       setSync(true);
-      const eng = (sum && sum.engine) || {};
+      const eng = sum.engine || {};
       $('#engineDot').className = 'dot' + (eng.status === 'ok' ? '' : eng.status === 'down' ? ' down' : ' warn');
       $('#engineMeta').textContent = eng.status === 'ok' ? `связь есть · ${eng.version || 'Checkmk'}` : 'нет связи с Checkmk';
       $('#setEngine').textContent = eng.status === 'ok' ? `подключено (${eng.version || 'Checkmk'})` : 'нет связи';
+      if (can('users') && $('#usersCard') && !$('#usersCard').hidden) loadUsers();
     } catch (e) {
       setSync(false);
       $('#footStatus').textContent = 'API недоступен';
+    }
+  }
+
+  async function loadUsers() {
+    if (!can('users')) return;
+    try {
+      cache.users = await api('/users');
+      renderUsers(cache.users);
+    } catch (e) {
+      $('#userRows').innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message || 'Ошибка')}</td></tr>`;
     }
   }
 
@@ -199,6 +355,16 @@
       toast('Площадка удалена');
       refresh();
     } catch (e) { toast(e.message || 'Не удалось удалить площадку', false); }
+  }
+
+  async function deleteUser(id) {
+    const u = cache.users.find((x) => x.id === id);
+    if (!confirm(`Удалить пользователя «${u?.username || id}»?`)) return;
+    try {
+      await api(`/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      toast('Пользователь удалён');
+      loadUsers();
+    } catch (e) { toast(e.message || 'Не удалось удалить', false); }
   }
 
   /* ---------- Host modal ---------- */
@@ -233,7 +399,7 @@
   $('#hostForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const editName = $('#hostEditName').value.trim();
-    const body = {
+    const bodyPayload = {
       name: $('#hostName').value.trim(),
       address: $('#hostAddress').value.trim(),
       alias: $('#hostAlias').value.trim(),
@@ -241,26 +407,26 @@
       folder: $('#hostSite').value || '/',
       snmp_profile_id: $('#hostType').value === 'snmp' ? ($('#hostSnmpProfile').value || null) : null,
     };
-    if (!body.name) { toast('Укажите имя узла', false); return; }
+    if (!bodyPayload.name) { toast('Укажите имя узла', false); return; }
     try {
       if (editName) {
         const patch = {
-          address: body.address,
-          alias: body.alias,
-          type: body.type,
-          folder: body.folder,
-          snmp_profile_id: body.snmp_profile_id,
+          address: bodyPayload.address,
+          alias: bodyPayload.alias,
+          type: bodyPayload.type,
+          folder: bodyPayload.folder,
+          snmp_profile_id: bodyPayload.snmp_profile_id,
         };
-        if (body.name && body.name !== editName) patch.new_name = body.name;
+        if (bodyPayload.name && bodyPayload.name !== editName) patch.new_name = bodyPayload.name;
         const res = await api(`/hosts/${encodeURIComponent(editName)}`, {
           method: 'PATCH',
           body: patch,
         });
-        const finalName = res?.host || body.name || editName;
+        const finalName = res?.host || bodyPayload.name || editName;
         toast(finalName !== editName ? `Узел переименован: «${editName}» → «${finalName}»` : `Узел «${finalName}» обновлён`);
       } else {
-        await api('/hosts', { method: 'POST', body });
-        toast(`Узел «${body.name}» добавлен`);
+        await api('/hosts', { method: 'POST', body: bodyPayload });
+        toast(`Узел «${bodyPayload.name}» добавлен`);
       }
       closeHostModal();
       refresh();
@@ -313,6 +479,82 @@
       refresh();
     } catch (err) {
       toast(err.message || 'Не удалось сохранить площадку', false);
+    }
+  });
+
+  /* ---------- User modal ---------- */
+  const userModal = $('#userModal');
+  function fillUserHosts(selected) {
+    const box = $('#userHosts');
+    const set = new Set(selected || []);
+    const hosts = cache.hosts.length ? cache.hosts : [];
+    if (!hosts.length) {
+      box.innerHTML = '<div class="empty">Сначала добавьте узлы мониторинга.</div>';
+      return;
+    }
+    box.innerHTML = hosts.map((h) => `
+      <label><input type="checkbox" value="${esc(h.name)}" ${set.has(h.name) ? 'checked' : ''}>
+      <span>${esc(h.name)}${h.address ? ` · ${esc(h.address)}` : ''}</span></label>`).join('');
+  }
+
+  function toggleUserHosts() {
+    const isUser = $('#userRoleSelect')?.value === 'user';
+    $('#userHostsWrap').hidden = !isUser;
+  }
+  $('#userRoleSelect')?.addEventListener('change', toggleUserHosts);
+
+  function openUserModal(editId) {
+    const editing = Boolean(editId);
+    const u = editing ? cache.users.find((x) => x.id === editId) : null;
+    $('#userModalTitle').textContent = editing ? `Изменить «${u?.username || editId}»` : 'Новый пользователь';
+    $('#userEditId').value = editId || '';
+    $('#userUsername').value = u?.username || '';
+    $('#userDisplayName').value = u?.display_name || '';
+    $('#userRoleSelect').value = u?.role || 'user';
+    $('#userPassword').value = '';
+    $('#userPassword').placeholder = editing ? 'оставьте пустым, чтобы не менять' : 'минимум 6 символов';
+    $('#userPassword').required = !editing;
+    $('#userEnabled').checked = u ? Boolean(u.enabled) : true;
+    fillUserHosts(u?.hosts || []);
+    toggleUserHosts();
+    userModal?.showModal();
+    $('#userUsername')?.focus();
+  }
+
+  function closeUserModal() { userModal?.close(); }
+  $('#userModalClose')?.addEventListener('click', closeUserModal);
+  $('#userModalCancel')?.addEventListener('click', closeUserModal);
+  $('#addUser')?.addEventListener('click', () => openUserModal(null));
+
+  $('#userForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const editId = $('#userEditId').value.trim();
+    const role = $('#userRoleSelect').value;
+    const hosts = $$('#userHosts input:checked').map((c) => c.value);
+    const payload = {
+      username: $('#userUsername').value.trim(),
+      display_name: $('#userDisplayName').value.trim(),
+      role,
+      enabled: $('#userEnabled').checked,
+      hosts: role === 'user' ? hosts : [],
+    };
+    const password = $('#userPassword').value;
+    if (password) payload.password = password;
+    if (!payload.username) { toast('Укажите логин', false); return; }
+    try {
+      if (editId) {
+        await api(`/users/${encodeURIComponent(editId)}`, { method: 'PATCH', body: payload });
+        toast('Пользователь обновлён');
+      } else {
+        if (!password || password.length < 6) { toast('Пароль не короче 6 символов', false); return; }
+        payload.password = password;
+        await api('/users', { method: 'POST', body: payload });
+        toast('Пользователь создан');
+      }
+      closeUserModal();
+      loadUsers();
+    } catch (err) {
+      toast(err.message || 'Не удалось сохранить пользователя', false);
     }
   });
 
@@ -478,9 +720,25 @@
   });
 
   /* ---------- Boot ---------- */
-  const initial = location.hash.slice(1);
-  if (initial) showView(initial);
-  refresh();
-  loadChatHistory();
-  setInterval(refresh, 30000);
+  async function boot() {
+    const token = getToken();
+    if (!token) {
+      showLogin();
+      return;
+    }
+    try {
+      const cached = localStorage.getItem(USER_KEY);
+      if (cached) {
+        try { currentUser = JSON.parse(cached); } catch { currentUser = null; }
+      }
+      currentUser = await api('/auth/me');
+      localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+      enterApp();
+    } catch (_) {
+      clearSession();
+      showLogin();
+    }
+  }
+
+  boot();
 })();
