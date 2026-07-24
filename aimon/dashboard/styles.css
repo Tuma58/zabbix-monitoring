@@ -234,6 +234,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   padding: 12px;
   overflow: hidden;
 }
+.ai-card .btn.wide { margin-top: auto; }
 .ai-hint { color: var(--ink-soft); font-size: 15px; margin: 10px 0 16px; }
 
 .gera-overview {
