@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=gera6">
+  <link rel="stylesheet" href="styles.css?v=gera7">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -147,14 +147,21 @@
               </div>
             </section>
 
-            <section class="card ai-card">
-              <div class="gera-overview" data-goto="assistant" role="button" tabindex="0" title="AI ассистент">
+            <section class="ai-card" data-cap="ai">
+              <div
+                class="gera-overview"
+                data-goto="assistant"
+                role="button"
+                tabindex="0"
+                aria-label="Открыть AI ассистента"
+                title="AI ассистент"
+              >
                 <picture class="gera-overview-bg">
                   <source srcset="assets/gera-overview.webp" type="image/webp">
                   <img
                     class="gera-overview-img"
                     src="assets/gera-overview.png"
-                    alt="Гера"
+                    alt="Гера — AI ассистент"
                     width="640"
                     height="960"
                     loading="lazy"
@@ -175,7 +182,6 @@
                   </div>
                 </div>
               </div>
-              <button class="btn primary wide" data-goto="assistant">AI ассистент</button>
             </section>
           </div>
         </section>
@@ -513,6 +519,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=gera6"></script>
+  <script src="app.js?v=gera7"></script>
 </body>
 </html>
