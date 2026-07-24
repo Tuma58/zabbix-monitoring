@@ -199,8 +199,8 @@
     list = list.filter((h) => {
       if (f.name && !(h.name || '').toLowerCase().includes(f.name) && !(h.alias || '').toLowerCase().includes(f.name)) return false;
       if (f.address && !(h.address || '').toLowerCase().includes(f.address)) return false;
-      const site = (h.site_title || h.folder || '').toLowerCase();
-      if (f.site && !site.includes(f.site)) return false;
+      const path = h.folder || h.site_path || '/';
+      if (f.site && path !== f.site) return false;
       if (f.type && (h.type || 'agent') !== f.type) return false;
       if (f.state) {
         const st = h.state === 'ok' ? 'up' : (h.state === 'degraded' ? 'warn' : h.state);
@@ -299,6 +299,17 @@
     ).join('');
   }
 
+  function fillHostSiteFilter() {
+    const sel = $('#fHostSite');
+    if (!sel) return;
+    const cur = sel.value;
+    const sites = cache.sites.length ? cache.sites : [{ path: '/', title: 'Корень', id: '~' }];
+    sel.innerHTML = '<option value="">Все</option>' + sites.map((s) =>
+      `<option value="${esc(s.path)}">${esc(s.title || s.path)}</option>`
+    ).join('');
+    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+  }
+
   function fillSnmpSelect(sel, selected) {
     if (!sel) return;
     const snmp = cache.secrets.filter((s) => s.kind === 'snmp_v2c' || s.kind === 'snmp_v3');
@@ -362,6 +373,7 @@
       cache.hosts = hosts;
       cache.sites = sites;
       cache.secrets = secrets;
+      fillHostSiteFilter();
       renderMetrics(sum);
       renderHostMini(cache.hosts);
       renderHostTable();
@@ -748,7 +760,14 @@
       typing.textContent = res.reply || 'Готово.';
       const actions = Array.isArray(res.actions) ? res.actions : (res.action ? [res.action] : []);
       const mutated = actions.some((a) =>
-        a && ['add_host', 'add_hosts_from_scan', 'write_config', 'patch_config'].includes(a.tool) && a.result && a.result.ok
+        a && [
+          'add_host', 'update_host', 'delete_host', 'add_hosts_from_scan',
+          'create_site', 'update_site', 'delete_site',
+          'create_user', 'update_user', 'delete_user',
+          'create_secret', 'update_secret', 'delete_secret',
+          'create_custom_tool', 'delete_custom_tool',
+          'write_config', 'patch_config',
+        ].includes(a.tool) && a.result && a.result.ok
       );
       if (mutated) {
         const added = actions
@@ -785,16 +804,16 @@
     hostFilters = {
       name: ($('#fHostName')?.value || '').trim().toLowerCase(),
       address: ($('#fHostAddr')?.value || '').trim().toLowerCase(),
-      site: ($('#fHostSite')?.value || '').trim().toLowerCase(),
+      site: $('#fHostSite')?.value || '',
       type: $('#fHostType')?.value || '',
       state: $('#fHostState')?.value || '',
     };
     renderHostTable();
   }
-  ['fHostName', 'fHostAddr', 'fHostSite'].forEach((id) => {
+  ['fHostName', 'fHostAddr'].forEach((id) => {
     $(`#${id}`)?.addEventListener('input', syncHostFiltersFromUi);
   });
-  ['fHostType', 'fHostState'].forEach((id) => {
+  ['fHostSite', 'fHostType', 'fHostState'].forEach((id) => {
     $(`#${id}`)?.addEventListener('change', syncHostFiltersFromUi);
   });
   $$('.th-sort').forEach((btn) => {

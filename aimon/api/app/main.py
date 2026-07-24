@@ -37,7 +37,7 @@ app.add_middleware(
 store = JsonStore(settings.data_dir)
 box = SecretBox(settings.secrets_master_key)
 cmk = CheckmkClient(settings)
-assistant = AIAssistant(settings, cmk, store)
+assistant = AIAssistant(settings, cmk, store, box)
 
 P = settings.api_prefix
 AuthUser = dict[str, Any]
@@ -575,6 +575,25 @@ async def add_secret(payload: SecretIn, _: AuthUser = Depends(require_caps("secr
     return store.add_secret(payload.name, payload.kind, box.encrypt(payload.value))
 
 
+@app.patch(f"{P}/secrets/{{secret_id}}")
+async def update_secret(
+    secret_id: str,
+    payload: SecretIn,
+    _: AuthUser = Depends(require_caps("secrets")),
+) -> dict[str, Any]:
+    if payload.kind not in ("snmp_v2c", "snmp_v3", "agent_token", "checkmk_automation"):
+        raise HTTPException(400, "Unknown secret kind")
+    updated = store.update_secret(
+        secret_id,
+        name=payload.name,
+        kind=payload.kind,
+        encrypted_value=box.encrypt(payload.value) if payload.value else None,
+    )
+    if not updated:
+        raise HTTPException(404, "Secret not found")
+    return updated
+
+
 @app.delete(f"{P}/secrets/{{secret_id}}", status_code=204, response_class=Response)
 async def delete_secret(secret_id: str, _: AuthUser = Depends(require_caps("secrets"))) -> Response:
     if not store.delete_secret(secret_id):
@@ -584,11 +603,15 @@ async def delete_secret(secret_id: str, _: AuthUser = Depends(require_caps("secr
 
 # ---------- AI assistant ----------
 @app.post(f"{P}/ai/chat")
-async def ai_chat(payload: ChatIn = Body(...), _: AuthUser = Depends(require_caps("ai"))) -> dict[str, Any]:
+async def ai_chat(payload: ChatIn = Body(...), user: AuthUser = Depends(require_caps("ai"))) -> dict[str, Any]:
     if not settings.deepseek_api_key:
         raise HTTPException(404, "AI service is not configured")
     try:
-        return await assistant.chat(payload.message, session_id=payload.session_id or "default")
+        return await assistant.chat(
+            payload.message,
+            session_id=payload.session_id or "default",
+            actor=user,
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"DeepSeek error: {exc}") from exc
 

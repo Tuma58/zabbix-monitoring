@@ -20,12 +20,12 @@ class JsonStore:
         os.makedirs(data_dir, exist_ok=True)
         self._path = os.path.join(data_dir, "store.json")
         if not os.path.exists(self._path):
-            self._write({"secrets": [], "scans": [], "chats": {}, "users": []})
+            self._write({"secrets": [], "scans": [], "chats": {}, "users": [], "ai_tools": []})
         # ensure keys exist on older stores
         with self._lock:
             data = self._read()
             changed = False
-            for key, default in (("chats", {}), ("users", []), ("secrets", []), ("scans", [])):
+            for key, default in (("chats", {}), ("users", []), ("secrets", []), ("scans", []), ("ai_tools", [])):
                 if key not in data:
                     data[key] = default
                     changed = True
@@ -37,7 +37,7 @@ class JsonStore:
             with open(self._path, encoding="utf-8") as fh:
                 return json.load(fh)
         except (FileNotFoundError, json.JSONDecodeError):
-            return {"secrets": [], "scans": [], "chats": {}, "users": []}
+            return {"secrets": [], "scans": [], "chats": {}, "users": [], "ai_tools": []}
 
     def _write(self, data: dict[str, Any]) -> None:
         tmp = self._path + ".tmp"
@@ -73,6 +73,31 @@ class JsonStore:
             data.setdefault("secrets", []).append(entry)
             self._write(data)
             return {k: v for k, v in entry.items() if k != "value"}
+
+    def update_secret(
+        self,
+        secret_id: str,
+        *,
+        name: str | None = None,
+        kind: str | None = None,
+        encrypted_value: str | None = None,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            data = self._read()
+            for i, s in enumerate(data.get("secrets", [])):
+                if s.get("id") != secret_id:
+                    continue
+                updated = dict(s)
+                if name is not None and name.strip():
+                    updated["name"] = name.strip()
+                if kind is not None and kind.strip():
+                    updated["kind"] = kind.strip()
+                if encrypted_value is not None and encrypted_value != "":
+                    updated["value"] = encrypted_value
+                data["secrets"][i] = updated
+                self._write(data)
+                return {k: v for k, v in updated.items() if k != "value"}
+        return None
 
     def delete_secret(self, secret_id: str) -> bool:
         with self._lock:
@@ -252,3 +277,56 @@ class JsonStore:
                     changed = True
             if changed:
                 self._write(data)
+
+    # custom AI tools ---------------------------------------------------
+    def list_ai_tools(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return list(self._read().get("ai_tools", []))
+
+    def get_ai_tool(self, name: str) -> dict[str, Any] | None:
+        n = (name or "").strip().lower()
+        with self._lock:
+            for t in self._read().get("ai_tools", []):
+                if str(t.get("name", "")).lower() == n:
+                    return dict(t)
+        return None
+
+    def create_ai_tool(
+        self,
+        *,
+        name: str,
+        description: str,
+        parameters: dict[str, Any] | None = None,
+        steps: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        import re
+
+        n = (name or "").strip()
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{1,47}", n or ""):
+            raise ValueError("tool name: latin letters, digits, underscore; start with letter")
+        with self._lock:
+            data = self._read()
+            tools = data.setdefault("ai_tools", [])
+            if any(str(t.get("name", "")).lower() == n.lower() for t in tools):
+                raise ValueError("tool already exists")
+            entry = {
+                "id": uuid.uuid4().hex,
+                "name": n,
+                "description": (description or n).strip(),
+                "parameters": parameters
+                or {"type": "object", "properties": {}, "additionalProperties": False},
+                "steps": list(steps or []),
+                "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            }
+            tools.append(entry)
+            self._write(data)
+            return dict(entry)
+
+    def delete_ai_tool(self, name: str) -> bool:
+        n = (name or "").strip().lower()
+        with self._lock:
+            data = self._read()
+            before = len(data.get("ai_tools", []))
+            data["ai_tools"] = [t for t in data.get("ai_tools", []) if str(t.get("name", "")).lower() != n]
+            self._write(data)
+            return len(data["ai_tools"]) < before

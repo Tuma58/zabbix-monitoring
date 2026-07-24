@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=hosts1">
+  <link rel="stylesheet" href="styles.css?v=hosts2">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -199,7 +199,11 @@
                   <tr class="filter-row">
                     <th><input type="search" id="fHostName" placeholder="фильтр…" autocomplete="off"></th>
                     <th><input type="search" id="fHostAddr" placeholder="IP…" autocomplete="off"></th>
-                    <th><input type="search" id="fHostSite" placeholder="площадка…" autocomplete="off"></th>
+                    <th>
+                      <select id="fHostSite">
+                        <option value="">Все</option>
+                      </select>
+                    </th>
                     <th>
                       <select id="fHostType">
                         <option value="">Все</option>
@@ -269,7 +273,7 @@
             <div>
               <p class="eyebrow">DeepSeek</p>
               <h1>AI-ассистент</h1>
-              <p class="lead">Память диалога — 1 час. Может проверять связь и править конфиги AIMon.</p>
+              <p class="lead">Память диалога — 1 час. Может управлять узлами, площадками, пользователями (кроме админов), секретами и создавать свои инструменты.</p>
             </div>
             <button class="btn ghost" type="button" id="clearChat" title="Очистить память диалога">Очистить память</button>
           </div>
@@ -408,6 +412,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=hosts1"></script>
+  <script src="app.js?v=hosts2"></script>
 </body>
 </html>

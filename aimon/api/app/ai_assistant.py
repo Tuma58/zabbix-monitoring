@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 
-from app.checkmk import CheckmkClient
+from app.auth import ROLE_LABELS, hash_password, public_user
+from app.checkmk import CheckmkClient, folder_path_to_id
 from app.config import Settings
 from app.configs import ConfigManager
 from app.probe import (
@@ -19,10 +21,12 @@ from app.probe import (
     test_tcp,
 )
 from app.scan import cidr_is_allowed, sanitize_hostname, scan_snmp, suggest_device_name
+from app.secrets import SecretBox
 from app.store import JsonStore
 
+SECRET_KINDS = ("snmp_v2c", "snmp_v3", "agent_token", "checkmk_automation")
 
-TOOLS: list[dict[str, Any]] = [
+BUILTIN_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -51,8 +55,98 @@ TOOLS: list[dict[str, Any]] = [
                     "address": {"type": "string"},
                     "type": {"type": "string", "enum": ["agent", "snmp"]},
                     "snmp_community": {"type": "string"},
+                    "folder": {"type": "string", "description": "Путь площадки, напр. /office"},
+                    "alias": {"type": "string"},
                 },
                 "required": ["address"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_host",
+            "description": "Изменить узел: адрес, тип, площадку, alias или переименовать.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Текущее имя узла"},
+                    "new_name": {"type": "string"},
+                    "address": {"type": "string"},
+                    "type": {"type": "string", "enum": ["agent", "snmp"]},
+                    "snmp_community": {"type": "string"},
+                    "folder": {"type": "string"},
+                    "alias": {"type": "string"},
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_host",
+            "description": "Удалить узел из мониторинга.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_sites",
+            "description": "Список площадок (папок Checkmk).",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_site",
+            "description": "Создать площадку мониторинга.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Код латиницей"},
+                    "title": {"type": "string"},
+                    "parent": {"type": "string", "description": "Родительский путь, по умолчанию /"},
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_site",
+            "description": "Изменить название площадки.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "site_id": {"type": "string", "description": "id (~office) или путь (/office)"},
+                    "title": {"type": "string"},
+                },
+                "required": ["site_id", "title"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_site",
+            "description": "Удалить пустую площадку.",
+            "parameters": {
+                "type": "object",
+                "properties": {"site_id": {"type": "string"}},
+                "required": ["site_id"],
                 "additionalProperties": False,
             },
         },
@@ -85,7 +179,13 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {"ip": {"type": "string"}, "name": {"type": "string"}},
+                            "properties": {
+                                "ip": {"type": "string"},
+                                "name": {"type": "string"},
+                                "sysname": {"type": "string"},
+                                "sysdescr": {"type": "string"},
+                                "vendor": {"type": "string"},
+                            },
                             "required": ["ip"],
                         },
                     },
@@ -117,6 +217,129 @@ TOOLS: list[dict[str, Any]] = [
                     "verify_tls": {"type": "boolean"},
                 },
                 "required": ["target", "kind"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_users",
+            "description": "Список пользователей дашборда (без паролей). Только для администратора.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_user",
+            "description": (
+                "Создать пользователя дашборда. Роли: engineer или user (не admin). "
+                "Для user можно указать hosts — список имён узлов."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "username": {"type": "string"},
+                    "password": {"type": "string"},
+                    "display_name": {"type": "string"},
+                    "role": {"type": "string", "enum": ["engineer", "user"]},
+                    "hosts": {"type": "array", "items": {"type": "string"}},
+                    "enabled": {"type": "boolean"},
+                },
+                "required": ["username", "password", "role"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_user",
+            "description": (
+                "Изменить пользователя (не администратора): пароль, роль engineer/user, "
+                "hosts, display_name, enabled."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "username": {"type": "string"},
+                    "password": {"type": "string"},
+                    "display_name": {"type": "string"},
+                    "role": {"type": "string", "enum": ["engineer", "user"]},
+                    "hosts": {"type": "array", "items": {"type": "string"}},
+                    "enabled": {"type": "boolean"},
+                },
+                "required": ["username"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_user",
+            "description": "Удалить пользователя (не администратора).",
+            "parameters": {
+                "type": "object",
+                "properties": {"username": {"type": "string"}},
+                "required": ["username"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_secrets",
+            "description": "Список секретов/SNMP-профилей (без значений).",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_secret",
+            "description": "Создать секрет или SNMP-профиль (snmp_v2c / snmp_v3 / agent_token).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "kind": {"type": "string", "enum": list(SECRET_KINDS)},
+                    "value": {"type": "string", "description": "community / пароль / токен"},
+                },
+                "required": ["name", "kind", "value"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_secret",
+            "description": "Изменить имя/тип/значение секрета или SNMP-профиля.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "secret_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "kind": {"type": "string", "enum": list(SECRET_KINDS)},
+                    "value": {"type": "string"},
+                },
+                "required": ["secret_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_secret",
+            "description": "Удалить секрет / SNMP-профиль.",
+            "parameters": {
+                "type": "object",
+                "properties": {"secret_id": {"type": "string"}},
+                "required": ["secret_id"],
                 "additionalProperties": False,
             },
         },
@@ -189,31 +412,137 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_custom_tools",
+            "description": "Список пользовательских инструментов ассистента.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_custom_tool",
+            "description": (
+                "Создать новый инструмент ассистента — сценарий из встроенных tools. "
+                "В args шагов используй плейсхолдеры {{param}} из parameters. "
+                "Пример: steps=[{tool:test_connection, args:{target:'{{host}}', kind:'ping'}}]."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Имя латиницей, напр. check_office"},
+                    "description": {"type": "string"},
+                    "parameters": {
+                        "type": "object",
+                        "description": "JSON Schema параметров нового инструмента",
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string"},
+                                "args": {"type": "object"},
+                            },
+                            "required": ["tool"],
+                        },
+                    },
+                },
+                "required": ["name", "description", "steps"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_custom_tool",
+            "description": "Удалить пользовательский инструмент.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
+BUILTIN_TOOL_NAMES = {t["function"]["name"] for t in BUILTIN_TOOLS}
+# keep alias for older imports/tests
+TOOLS = BUILTIN_TOOLS
 
 SYSTEM_PROMPT = """Ты AIMon — ассистент мониторинга на Checkmk.
 Отвечай кратко по-русски. У тебя есть память диалога за последний час — учитывай предыдущие реплики.
 
 Правила:
 - Добавить/подключить узел → сразу add_host (есть IP — не переспрашивай).
+- Изменить/удалить узел → update_host / delete_host; площадки → create_site / update_site / delete_site / list_sites.
 - MikroTik/свитч/роутер → type=snmp; сервер Linux/Windows → type=agent.
 - «Проверь / пингани / порт / SNMP / агент» → test_connection.
-- Конфиги: сначала list_configs / read_config / analyze_config, прав правь через patch_config (предпочтительно) или write_config.
+- Пользователи дашборда: list_users / create_user / update_user / delete_user — только engineer и user, администраторов не создавать и не менять.
+- SNMP-профили и секреты: list_secrets / create_secret / update_secret / delete_secret.
+- Можно создавать новые инструменты (create_custom_tool) как сценарии из встроенных tools с {{placeholders}}.
+- Конфиги: сначала list_configs / read_config / analyze_config, правь через patch_config или write_config.
 - После правки конфига сообщи, нужен ли restart (restart_hint) и какой сервис.
 - Не выдумывай метрики и результаты проверок — только данные tools.
-- Не читай и не пиши секреты (.env с ключами); работай только с файлами из list_configs.
+- Не читай и не пиши секреты (.env с ключами); работай только с файлами из list_configs и API секретов.
 """
 
 
+def _subst(value: Any, params: dict[str, Any]) -> Any:
+    if isinstance(value, str):
+        out = value
+        for k, v in params.items():
+            out = out.replace("{{" + str(k) + "}}", str(v))
+        return out
+    if isinstance(value, list):
+        return [_subst(x, params) for x in value]
+    if isinstance(value, dict):
+        return {k: _subst(v, params) for k, v in value.items()}
+    return value
+
+
 class AIAssistant:
-    def __init__(self, settings: Settings, cmk: CheckmkClient, store: JsonStore) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        cmk: CheckmkClient,
+        store: JsonStore,
+        box: SecretBox | None = None,
+    ) -> None:
         self.settings = settings
         self.cmk = cmk
         self.store = store
+        self.box = box or SecretBox(settings.secrets_master_key)
         self.configs = ConfigManager(settings.config_root)
+        self._actor: dict[str, Any] | None = None
 
-    async def chat(self, message: str, session_id: str = "default") -> dict[str, Any]:
+    def _tools_payload(self) -> list[dict[str, Any]]:
+        custom = []
+        for t in self.store.list_ai_tools():
+            custom.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "description": t.get("description") or t["name"],
+                        "parameters": t.get("parameters")
+                        or {"type": "object", "properties": {}, "additionalProperties": False},
+                    },
+                }
+            )
+        return BUILTIN_TOOLS + custom
+
+    async def chat(
+        self,
+        message: str,
+        session_id: str = "default",
+        actor: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self._actor = actor
         ttl = int(self.settings.chat_ttl_seconds or 3600)
         history = self.store.get_chat(session_id, ttl_seconds=ttl)
         messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -228,7 +557,7 @@ class AIAssistant:
         reply = ""
 
         async with httpx.AsyncClient(timeout=90) as client:
-            for _ in range(6):
+            for _ in range(8):
                 data = await self._complete(client, messages)
                 choice = (data.get("choices") or [{}])[0]
                 msg = choice.get("message") or {}
@@ -255,12 +584,12 @@ class AIAssistant:
                             {
                                 "role": "tool",
                                 "tool_call_id": call.get("id") or name,
-                                "content": json.dumps(result, ensure_ascii=False)[:12_000],
+                                "content": json.dumps(result, ensure_ascii=False)[:12000],
                             }
                         )
                     continue
 
-                reply = (msg.get("content") or "").strip()
+                reply = (msg.get("content") or "").strip() or self._fallback_reply(actions)
                 break
 
         if not reply:
@@ -273,19 +602,18 @@ class AIAssistant:
             ttl_seconds=ttl,
             meta={"actions": [{"tool": a.get("tool"), "ok": (a.get("result") or {}).get("ok")} for a in actions]},
         )
-        primary = actions[-1] if actions else None
         return {
             "reply": reply,
-            "action": primary,
             "actions": actions,
             "session_id": session_id,
+            "ttl_seconds": ttl,
             "memory_turns": len(self.store.get_chat(session_id, ttl_seconds=ttl)),
         }
 
     def history(self, session_id: str) -> list[dict[str, Any]]:
         ttl = int(self.settings.chat_ttl_seconds or 3600)
         return [
-            {"role": m["role"], "content": m["content"], "ts": m.get("ts")}
+            m
             for m in self.store.get_chat(session_id, ttl_seconds=ttl)
             if m.get("role") in ("user", "assistant")
         ]
@@ -296,13 +624,32 @@ class AIAssistant:
     @staticmethod
     def _fallback_reply(actions: list[dict[str, Any]]) -> str:
         for a in actions:
-            if a.get("tool") == "add_host" and (a.get("result") or {}).get("ok"):
-                return f"Узел «{a['result']['host']}» добавлен в мониторинг."
-            if a.get("tool") == "test_connection":
-                r = a.get("result") or {}
-                return "Проверка успешна." if r.get("ok") else f"Проверка не прошла: {r.get('error', 'ошибка')}"
-            if a.get("tool") in ("write_config", "patch_config") and (a.get("result") or {}).get("ok"):
-                return f"Конфиг «{a['result'].get('path')}» обновлён."
+            tool = a.get("tool")
+            r = a.get("result") or {}
+            if not r.get("ok"):
+                continue
+            if tool == "add_host":
+                return f"Узел «{r.get('host')}» добавлен в мониторинг."
+            if tool == "update_host":
+                return f"Узел «{r.get('host')}» обновлён."
+            if tool == "delete_host":
+                return f"Узел «{r.get('host')}» удалён."
+            if tool == "create_site":
+                return f"Площадка «{r.get('title') or r.get('name')}» создана."
+            if tool == "create_user":
+                return f"Пользователь «{r.get('username')}» создан."
+            if tool == "create_secret":
+                return f"Секрет «{r.get('name')}» сохранён."
+            if tool == "create_custom_tool":
+                return f"Инструмент «{r.get('name')}» создан."
+            if tool == "test_connection":
+                return "Проверка успешна."
+            if tool in ("write_config", "patch_config"):
+                return f"Конфиг «{r.get('path')}» обновлён."
+        for a in actions:
+            r = a.get("result") or {}
+            if r.get("error"):
+                return f"Не удалось: {r.get('error')}"
         return "Готово."
 
     async def _complete(self, client: httpx.AsyncClient, messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -312,7 +659,7 @@ class AIAssistant:
             json={
                 "model": self.settings.deepseek_model,
                 "messages": messages,
-                "tools": TOOLS,
+                "tools": self._tools_payload(),
                 "tool_choice": "auto",
             },
         )
@@ -341,13 +688,18 @@ class AIAssistant:
         if "://" in t:
             host = urlparse(t if "://" in t else f"http://{t}").hostname or ""
         elif ":" in t and t.count(":") == 1 and not t.startswith("["):
-            # host:port
             host = t.rsplit(":", 1)[0]
         if not host_allowed(host, self.settings.scan_allowlist_cidrs, known):
             return False, f"target not allowed by policy: {host}"
         return True, host
 
-    async def _run_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    def _require_admin(self) -> dict[str, Any] | None:
+        actor = self._actor or {}
+        if actor.get("role") != "admin":
+            return {"ok": False, "error": "Нужны права администратора"}
+        return None
+
+    async def _run_tool(self, name: str, args: dict[str, Any], *, _depth: int = 0) -> dict[str, Any]:
         try:
             if name == "get_summary":
                 return await self._get_summary()
@@ -355,12 +707,40 @@ class AIAssistant:
                 return await self._list_hosts()
             if name == "add_host":
                 return await self._add_host(args)
+            if name == "update_host":
+                return await self._update_host(args)
+            if name == "delete_host":
+                return await self._delete_host(args)
+            if name == "list_sites":
+                return await self._list_sites()
+            if name == "create_site":
+                return await self._create_site(args)
+            if name == "update_site":
+                return await self._update_site(args)
+            if name == "delete_site":
+                return await self._delete_site(args)
             if name == "scan_network":
                 return await self._scan_network(args)
             if name == "add_hosts_from_scan":
                 return await self._add_hosts_from_scan(args)
             if name == "test_connection":
                 return await self._test_connection(args)
+            if name == "list_users":
+                return self._list_users()
+            if name == "create_user":
+                return self._create_user(args)
+            if name == "update_user":
+                return self._update_user(args)
+            if name == "delete_user":
+                return self._delete_user(args)
+            if name == "list_secrets":
+                return self._list_secrets()
+            if name == "create_secret":
+                return self._create_secret(args)
+            if name == "update_secret":
+                return self._update_secret(args)
+            if name == "delete_secret":
+                return self._delete_secret(args)
             if name == "list_configs":
                 return self.configs.list_files()
             if name == "read_config":
@@ -376,11 +756,46 @@ class AIAssistant:
                     str(args.get("new") or ""),
                     replace_all=bool(args.get("replace_all")),
                 )
+            if name == "list_custom_tools":
+                return self._list_custom_tools()
+            if name == "create_custom_tool":
+                return self._create_custom_tool(args)
+            if name == "delete_custom_tool":
+                return self._delete_custom_tool(args)
+
+            custom = self.store.get_ai_tool(name)
+            if custom:
+                return await self._run_custom_tool(custom, args, _depth=_depth)
             return {"ok": False, "error": f"unknown tool: {name}"}
         except httpx.HTTPError as exc:
             return {"ok": False, "error": f"Checkmk/HTTP: {exc}"}
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)}
+
+    async def _run_custom_tool(self, tool: dict[str, Any], args: dict[str, Any], *, _depth: int) -> dict[str, Any]:
+        if _depth >= 3:
+            return {"ok": False, "error": "custom tool nesting too deep"}
+        steps = tool.get("steps") or []
+        if not steps:
+            return {"ok": False, "error": "custom tool has no steps"}
+        results: list[dict[str, Any]] = []
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            tname = str(step.get("tool") or "").strip()
+            if not tname or tname not in BUILTIN_TOOL_NAMES:
+                return {"ok": False, "error": f"custom step tool not allowed: {tname}"}
+            if tname in ("create_custom_tool", "delete_custom_tool", "list_custom_tools"):
+                return {"ok": False, "error": f"custom step tool not allowed: {tname}"}
+            raw_args = step.get("args") if isinstance(step.get("args"), dict) else {}
+            call_args = _subst(raw_args, args)
+            if not isinstance(call_args, dict):
+                call_args = {}
+            res = await self._run_tool(tname, call_args, _depth=_depth + 1)
+            results.append({"tool": tname, "result": res})
+            if not res.get("ok", True) and res.get("error"):
+                return {"ok": False, "error": res.get("error"), "steps": results}
+        return {"ok": True, "tool": tool.get("name"), "steps": results}
 
     async def _get_summary(self) -> dict[str, Any]:
         if not self.cmk.enabled:
@@ -391,7 +806,16 @@ class AIAssistant:
             "ok": True,
             "engine": ver.get("versions", {}).get("checkmk", "Checkmk"),
             "hosts_total": len(hosts),
-            "hosts": [{"name": h["name"], "address": h.get("address"), "type": h.get("type")} for h in hosts[:50]],
+            "hosts": [
+                {
+                    "name": h["name"],
+                    "address": h.get("address"),
+                    "type": h.get("type"),
+                    "folder": h.get("folder"),
+                    "alias": h.get("alias"),
+                }
+                for h in hosts[:50]
+            ],
         }
 
     async def _list_hosts(self) -> dict[str, Any]:
@@ -401,7 +825,16 @@ class AIAssistant:
         return {
             "ok": True,
             "count": len(hosts),
-            "hosts": [{"name": h["name"], "address": h.get("address"), "type": h.get("type")} for h in hosts],
+            "hosts": [
+                {
+                    "name": h["name"],
+                    "address": h.get("address"),
+                    "type": h.get("type"),
+                    "folder": h.get("folder"),
+                    "alias": h.get("alias"),
+                }
+                for h in hosts
+            ],
         }
 
     async def _add_host(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -413,8 +846,122 @@ class AIAssistant:
         name = sanitize_hostname(str(args.get("name") or ""), address)
         host_type = str(args.get("type") or "agent").lower()
         community = str(args.get("snmp_community") or "public") if host_type == "snmp" else None
-        result = await self.cmk.register_and_activate(name, address, snmp_community=community)
-        return {"ok": True, "host": result["host"], "address": address, "type": host_type, "activated": True}
+        folder = str(args.get("folder") or "/").strip() or "/"
+        alias = str(args.get("alias") or "").strip()
+        result = await self.cmk.register_and_activate(
+            name, address, snmp_community=community, folder=folder, alias=alias
+        )
+        return {
+            "ok": True,
+            "host": result["host"],
+            "address": address,
+            "type": host_type,
+            "folder": folder,
+            "activated": True,
+        }
+
+    async def _update_host(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name is required"}
+        existing = await self.cmk.get_host(name)
+        if not existing:
+            return {"ok": False, "error": f"host not found: {name}"}
+
+        host_type = args.get("type")
+        community = None
+        if host_type == "snmp":
+            community = str(args.get("snmp_community") or "public")
+        address = args.get("address")
+        alias = args.get("alias")
+        if address is not None and address == (existing.get("address") or ""):
+            address = None
+        if alias is not None and alias == (existing.get("alias") or ""):
+            alias = None
+        if host_type is not None and host_type == (existing.get("type") or "agent"):
+            if not (host_type == "snmp" and community):
+                host_type = None
+
+        result = await self.cmk.update_host(
+            name,
+            address=address,
+            alias=alias,
+            snmp_community=community if args.get("type") == "snmp" else None,
+            host_type=host_type,
+        )
+        folder = args.get("folder")
+        if folder is not None:
+            current_folder = existing.get("folder") or "/"
+            if (folder or "/") != current_folder:
+                await self.cmk.move_host(name, folder or "/")
+            result["folder"] = folder or "/"
+        await self.cmk.activate_changes()
+        result["activated"] = True
+
+        new_name = str(args.get("new_name") or "").strip()
+        current = name
+        if new_name and new_name != current:
+            renamed = await self.cmk.rename_host(current, new_name)
+            result.update(renamed)
+            self.store.rename_host_refs(current, new_name)
+            current = new_name
+            await self.cmk.activate_changes()
+            result["activated"] = True
+        result["host"] = current
+        result["ok"] = True
+        return result
+
+    async def _delete_host(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name is required"}
+        await self.cmk.delete_host(name)
+        await self.cmk.activate_changes()
+        self.store.remove_host_refs(name)
+        return {"ok": True, "host": name, "deleted": True}
+
+    async def _list_sites(self) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": True, "sites": [{"id": "~", "path": "/", "title": "Корень"}]}
+        folders = await self.cmk.list_folders()
+        return {"ok": True, "count": len(folders), "sites": folders}
+
+    async def _create_site(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name is required"}
+        title = str(args.get("title") or name).strip()
+        parent = str(args.get("parent") or "/").strip() or "/"
+        site = await self.cmk.create_folder(name, title=title, parent=parent)
+        await self.cmk.activate_changes()
+        return {"ok": True, **site, "activated": True}
+
+    async def _update_site(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        site_id = str(args.get("site_id") or "").strip()
+        title = str(args.get("title") or "").strip()
+        if not site_id or not title:
+            return {"ok": False, "error": "site_id and title required"}
+        site = await self.cmk.update_folder(site_id, title=title)
+        await self.cmk.activate_changes()
+        return {"ok": True, **site, "activated": True}
+
+    async def _delete_site(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        site_id = str(args.get("site_id") or "").strip()
+        if not site_id:
+            return {"ok": False, "error": "site_id required"}
+        await self.cmk.delete_folder(site_id)
+        await self.cmk.activate_changes()
+        return {"ok": True, "site_id": site_id if site_id.startswith("~") else folder_path_to_id(site_id), "deleted": True}
 
     async def _scan_network(self, args: dict[str, Any]) -> dict[str, Any]:
         cidr = str(args.get("cidr") or "").strip()
@@ -433,13 +980,14 @@ class AIAssistant:
         community = str(args.get("snmp_community") or "public")
         added: list[str] = []
         errors: list[str] = []
+        used: set[str] = set()
         for dev in args.get("devices") or []:
             if not isinstance(dev, dict):
                 continue
             ip = str(dev.get("ip") or "").strip()
             if not ip:
                 continue
-            name = suggest_device_name(dev)
+            name = suggest_device_name(dev, used=used)
             alias = str(dev.get("sysdescr") or dev.get("sysname") or "").strip()[:120]
             try:
                 await self.cmk.register_and_activate(name, ip, snmp_community=community, alias=alias)
@@ -447,6 +995,201 @@ class AIAssistant:
             except httpx.HTTPError as exc:
                 errors.append(f"{ip}: {exc}")
         return {"ok": True, "added": added, "count": len(added), "errors": errors}
+
+    def _list_users(self) -> dict[str, Any]:
+        denied = self._require_admin()
+        if denied:
+            return denied
+        users = [public_user(u) for u in self.store.list_users()]
+        return {"ok": True, "count": len(users), "users": users}
+
+    def _create_user(self, args: dict[str, Any]) -> dict[str, Any]:
+        denied = self._require_admin()
+        if denied:
+            return denied
+        role = str(args.get("role") or "user").strip()
+        if role not in ("engineer", "user"):
+            return {"ok": False, "error": "role must be engineer or user (admin запрещён)"}
+        username = str(args.get("username") or "").strip()
+        password = str(args.get("password") or "")
+        if not username:
+            return {"ok": False, "error": "username required"}
+        if len(password) < 6:
+            return {"ok": False, "error": "пароль не короче 6 символов"}
+        try:
+            user = self.store.create_user(
+                username=username,
+                password_hash=hash_password(password),
+                role=role,
+                display_name=str(args.get("display_name") or ""),
+                hosts=list(args.get("hosts") or []) if role == "user" else [],
+                enabled=bool(args.get("enabled", True)),
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "user": public_user(user), "username": user["username"], "role_label": ROLE_LABELS.get(role)}
+
+    def _update_user(self, args: dict[str, Any]) -> dict[str, Any]:
+        denied = self._require_admin()
+        if denied:
+            return denied
+        username = str(args.get("username") or "").strip()
+        existing = self.store.get_user_by_username(username)
+        if not existing:
+            return {"ok": False, "error": "user not found"}
+        if existing.get("role") == "admin":
+            return {"ok": False, "error": "нельзя изменять администратора через ассистента"}
+        role = args.get("role")
+        if role is not None and role not in ("engineer", "user"):
+            return {"ok": False, "error": "role must be engineer or user"}
+        fields: dict[str, Any] = {}
+        if args.get("display_name") is not None:
+            fields["display_name"] = str(args.get("display_name") or "")
+        if role is not None:
+            fields["role"] = role
+        if args.get("enabled") is not None:
+            fields["enabled"] = bool(args.get("enabled"))
+        effective_role = role if role is not None else existing.get("role")
+        if args.get("hosts") is not None:
+            fields["hosts"] = list(args.get("hosts") or []) if effective_role == "user" else []
+        password = args.get("password")
+        if password:
+            if len(str(password)) < 6:
+                return {"ok": False, "error": "пароль не короче 6 символов"}
+            fields["password_hash"] = hash_password(str(password))
+        try:
+            updated = self.store.update_user(existing["id"], **fields)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not updated:
+            return {"ok": False, "error": "user not found"}
+        return {"ok": True, "user": public_user(updated)}
+
+    def _delete_user(self, args: dict[str, Any]) -> dict[str, Any]:
+        denied = self._require_admin()
+        if denied:
+            return denied
+        username = str(args.get("username") or "").strip()
+        existing = self.store.get_user_by_username(username)
+        if not existing:
+            return {"ok": False, "error": "user not found"}
+        if existing.get("role") == "admin":
+            return {"ok": False, "error": "нельзя удалять администратора через ассистента"}
+        actor = self._actor or {}
+        if actor.get("id") and actor.get("id") == existing.get("id"):
+            return {"ok": False, "error": "нельзя удалить свою учётную запись"}
+        if not self.store.delete_user(existing["id"]):
+            return {"ok": False, "error": "user not found"}
+        return {"ok": True, "username": username, "deleted": True}
+
+    def _list_secrets(self) -> dict[str, Any]:
+        items = self.store.list_secrets()
+        return {"ok": True, "count": len(items), "secrets": items}
+
+    def _create_secret(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = str(args.get("name") or "").strip()
+        kind = str(args.get("kind") or "").strip()
+        value = str(args.get("value") or "")
+        if not name or not value:
+            return {"ok": False, "error": "name and value required"}
+        if kind not in SECRET_KINDS:
+            return {"ok": False, "error": f"kind must be one of: {', '.join(SECRET_KINDS)}"}
+        entry = self.store.add_secret(name, kind, self.box.encrypt(value))
+        return {"ok": True, **entry}
+
+    def _update_secret(self, args: dict[str, Any]) -> dict[str, Any]:
+        secret_id = str(args.get("secret_id") or "").strip()
+        if not secret_id:
+            return {"ok": False, "error": "secret_id required"}
+        kind = args.get("kind")
+        if kind is not None and kind not in SECRET_KINDS:
+            return {"ok": False, "error": f"kind must be one of: {', '.join(SECRET_KINDS)}"}
+        encrypted = None
+        if args.get("value") is not None and str(args.get("value")) != "":
+            encrypted = self.box.encrypt(str(args.get("value")))
+        updated = self.store.update_secret(
+            secret_id,
+            name=str(args["name"]) if args.get("name") is not None else None,
+            kind=str(kind) if kind is not None else None,
+            encrypted_value=encrypted,
+        )
+        if not updated:
+            return {"ok": False, "error": "secret not found"}
+        return {"ok": True, **updated}
+
+    def _delete_secret(self, args: dict[str, Any]) -> dict[str, Any]:
+        secret_id = str(args.get("secret_id") or "").strip()
+        if not secret_id:
+            return {"ok": False, "error": "secret_id required"}
+        if not self.store.delete_secret(secret_id):
+            return {"ok": False, "error": "secret not found"}
+        return {"ok": True, "secret_id": secret_id, "deleted": True}
+
+    def _list_custom_tools(self) -> dict[str, Any]:
+        tools = [
+            {
+                "name": t.get("name"),
+                "description": t.get("description"),
+                "steps": t.get("steps") or [],
+                "created_at": t.get("created_at"),
+            }
+            for t in self.store.list_ai_tools()
+        ]
+        return {"ok": True, "count": len(tools), "tools": tools}
+
+    def _create_custom_tool(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = str(args.get("name") or "").strip()
+        description = str(args.get("description") or "").strip()
+        steps = args.get("steps") or []
+        if not isinstance(steps, list) or not steps:
+            return {"ok": False, "error": "steps required"}
+        if name.lower() in {n.lower() for n in BUILTIN_TOOL_NAMES}:
+            return {"ok": False, "error": "name conflicts with built-in tool"}
+        cleaned: list[dict[str, Any]] = []
+        for step in steps:
+            if not isinstance(step, dict):
+                return {"ok": False, "error": "invalid step"}
+            tname = str(step.get("tool") or "").strip()
+            if tname not in BUILTIN_TOOL_NAMES or tname in (
+                "create_custom_tool",
+                "delete_custom_tool",
+                "list_custom_tools",
+            ):
+                return {"ok": False, "error": f"step tool not allowed: {tname}"}
+            cleaned.append(
+                {
+                    "tool": tname,
+                    "args": step.get("args") if isinstance(step.get("args"), dict) else {},
+                }
+            )
+        params = args.get("parameters")
+        if params is not None and not isinstance(params, dict):
+            return {"ok": False, "error": "parameters must be object"}
+        # collect placeholders for default schema
+        if not params:
+            props: dict[str, Any] = {}
+            for step in cleaned:
+                for m in re.findall(r"\{\{(\w+)\}\}", json.dumps(step.get("args") or {}, ensure_ascii=False)):
+                    props[m] = {"type": "string"}
+            params = {"type": "object", "properties": props, "additionalProperties": False}
+        try:
+            entry = self.store.create_ai_tool(
+                name=name,
+                description=description or name,
+                parameters=params,
+                steps=cleaned,
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "name": entry["name"], "description": entry["description"], "steps": entry["steps"]}
+
+    def _delete_custom_tool(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name required"}
+        if not self.store.delete_ai_tool(name):
+            return {"ok": False, "error": "tool not found"}
+        return {"ok": True, "name": name, "deleted": True}
 
     async def _test_connection(self, args: dict[str, Any]) -> dict[str, Any]:
         target = str(args.get("target") or "").strip()
@@ -468,7 +1211,6 @@ class AIAssistant:
                 return {"ok": False, "error": "port required for tcp"}
             return await test_tcp(host_or_err if ok else target.split(":")[0], port)
         if kind == "http":
-            # allow http to private/public monitoring endpoints
             parsed_host = urlparse(target if "://" in target else f"http://{target}").hostname or ""
             if not host_allowed(parsed_host, self.settings.scan_allowlist_cidrs, known):
                 return {"ok": False, "error": f"target not allowed by policy: {parsed_host}"}
