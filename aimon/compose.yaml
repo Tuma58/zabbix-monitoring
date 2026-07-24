@@ -51,6 +51,9 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    extra_hosts:
+      # CloudFront IP for api.deepseek.com (fallback when Docker DNS flakes)
+      - "api.deepseek.com:3.173.21.63"
     volumes:
       - api-data:/data
       # Конфиги для анализа/правки ассистентом (те же файлы, что у edge/dashboard)
