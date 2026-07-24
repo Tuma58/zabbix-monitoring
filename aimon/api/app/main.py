@@ -21,7 +21,7 @@ from app.auth import (
 )
 from app.checkmk import CheckmkClient
 from app.config import get_settings
-from app.scan import cidr_is_allowed, scan_snmp
+from app.scan import cidr_is_allowed, scan_snmp, suggest_device_name
 from app.secrets import SecretBox
 from app.store import JsonStore
 
@@ -547,13 +547,15 @@ async def scan_add(payload: ScanAddIn, _: AuthUser = Depends(require_caps("hosts
         raise HTTPException(503, "Checkmk is not configured")
     community = _community_for(payload.snmp_profile_id) or "public"
     added = []
+    used: set[str] = set()
     for dev in payload.devices:
-        ip = dev.get("ip")
+        ip = (dev.get("ip") or "").strip()
         if not ip:
             continue
-        name = dev.get("name") or f"snmp-{ip.replace('.', '-')}"
+        name = suggest_device_name(dev, used=used)
+        alias = (dev.get("sysdescr") or dev.get("sysname") or "").strip()[:120]
         try:
-            await cmk.register_and_activate(name, ip, snmp_community=community)
+            await cmk.register_and_activate(name, ip, snmp_community=community, alias=alias)
             added.append(name)
         except httpx.HTTPError:
             continue

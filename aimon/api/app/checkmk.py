@@ -188,11 +188,13 @@ class CheckmkClient:
             ext = item.get("extensions", {}) or {}
             attrs = ext.get("attributes", {}) or {}
             folder = ext.get("folder") or "/"
+            snmp_tag = str(attrs.get("tag_snmp_ds") or "")
+            host_type = "snmp" if snmp_tag.startswith("snmp") else "agent"
             out.append(
                 {
                     "name": item.get("id"),
                     "address": attrs.get("ipaddress", ""),
-                    "type": "snmp" if attrs.get("tag_snmp_ds") else "agent",
+                    "type": host_type,
                     "folder": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
                     "site_path": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
                     "state": "up",
@@ -211,10 +213,12 @@ class CheckmkClient:
         ext = item.get("extensions", {}) or {}
         attrs = ext.get("attributes", {}) or {}
         folder = ext.get("folder") or "/"
+        snmp_tag = str(attrs.get("tag_snmp_ds") or "")
+        host_type = "snmp" if snmp_tag.startswith("snmp") else "agent"
         return {
             "name": item.get("id"),
             "address": attrs.get("ipaddress", ""),
-            "type": "snmp" if attrs.get("tag_snmp_ds") else "agent",
+            "type": host_type,
             "folder": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
             "alias": attrs.get("alias", ""),
             "attributes": attrs,

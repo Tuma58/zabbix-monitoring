@@ -17,6 +17,8 @@
   let cache = { hosts: [], sites: [], secrets: [], users: [] };
   let currentUser = null;
   let refreshTimer = null;
+  let hostSort = { key: 'name', dir: 1 };
+  let hostFilters = { name: '', address: '', site: '', type: '', state: '' };
 
   function toast(message, ok = true) {
     const el = $('#toast');
@@ -167,6 +169,7 @@
   /* ---------- Data rendering ---------- */
   function stateClass(s) { return s === 'up' || s === 'ok' ? '' : s === 'warn' || s === 'degraded' ? 'warn' : 'down'; }
   function stateLabel(s) { return ({ up: 'Доступен', ok: 'Доступен', warn: 'Предупреждение', degraded: 'Предупреждение', down: 'Недоступен' })[s] || s; }
+  function typeLabel(t) { return t === 'snmp' ? 'SNMP' : 'Агент'; }
 
   function renderMetrics(sum) {
     $('#mHosts').textContent = sum.hosts_total ?? 0;
@@ -186,20 +189,72 @@
     const box = $('#hostMini');
     if (!hosts.length) { box.innerHTML = '<div class="empty">Пока нет узлов. Установите агент одной командой или просканируйте сеть.</div>'; return; }
     box.innerHTML = hosts.slice(0, 6).map((h) => `
-      <div class="row"><div><b>${esc(h.name)}</b><br><small>${esc(h.address || '')} · ${esc(h.site_title || h.folder || '/')} · ${esc(h.type || 'agent')}</small></div>
+      <div class="row"><div><b>${esc(h.name)}</b><br><small>${esc(h.address || '')} · ${esc(h.site_title || h.folder || '/')} · ${esc(typeLabel(h.type))}</small></div>
       <span class="state ${stateClass(h.state)} state-right">${stateLabel(h.state)}</span></div>`).join('');
   }
 
-  function renderHostTable(hosts) {
+  function filteredHosts() {
+    const f = hostFilters;
+    let list = cache.hosts.slice();
+    list = list.filter((h) => {
+      if (f.name && !(h.name || '').toLowerCase().includes(f.name) && !(h.alias || '').toLowerCase().includes(f.name)) return false;
+      if (f.address && !(h.address || '').toLowerCase().includes(f.address)) return false;
+      const site = (h.site_title || h.folder || '').toLowerCase();
+      if (f.site && !site.includes(f.site)) return false;
+      if (f.type && (h.type || 'agent') !== f.type) return false;
+      if (f.state) {
+        const st = h.state === 'ok' ? 'up' : (h.state === 'degraded' ? 'warn' : h.state);
+        if (st !== f.state) return false;
+      }
+      return true;
+    });
+    const key = hostSort.key;
+    const dir = hostSort.dir;
+    list.sort((a, b) => {
+      const va = (() => {
+        if (key === 'site') return (a.site_title || a.folder || '').toLowerCase();
+        if (key === 'type') return typeLabel(a.type || 'agent').toLowerCase();
+        if (key === 'state') return stateLabel(a.state || '').toLowerCase();
+        return String(a[key] || '').toLowerCase();
+      })();
+      const vb = (() => {
+        if (key === 'site') return (b.site_title || b.folder || '').toLowerCase();
+        if (key === 'type') return typeLabel(b.type || 'agent').toLowerCase();
+        if (key === 'state') return stateLabel(b.state || '').toLowerCase();
+        return String(b[key] || '').toLowerCase();
+      })();
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+    return list;
+  }
+
+  function updateSortIndicators() {
+    $$('.th-sort').forEach((btn) => {
+      const on = btn.dataset.sort === hostSort.key;
+      btn.classList.toggle('active', on);
+      btn.dataset.dir = on ? (hostSort.dir > 0 ? 'asc' : 'desc') : '';
+      const ind = $('.sort-ind', btn);
+      if (ind) ind.textContent = on ? (hostSort.dir > 0 ? ' ↑' : ' ↓') : '';
+    });
+  }
+
+  function renderHostTable() {
     const tb = $('#hostRows');
     const write = can('hosts_write');
-    if (!hosts.length) { tb.innerHTML = `<tr><td colspan="${write ? 6 : 5}" class="empty">Узлов пока нет.</td></tr>`; return; }
+    const hosts = filteredHosts();
+    updateSortIndicators();
+    if (!hosts.length) {
+      tb.innerHTML = `<tr><td colspan="${write ? 6 : 5}" class="empty">${cache.hosts.length ? 'Нет узлов по фильтру.' : 'Узлов пока нет.'}</td></tr>`;
+      return;
+    }
     tb.innerHTML = hosts.map((h) => `
       <tr>
         <td><b>${esc(h.name)}</b>${h.alias ? `<br><small>${esc(h.alias)}</small>` : ''}</td>
         <td>${esc(h.address || '—')}</td>
         <td>${esc(h.site_title || h.folder || 'Корень')}</td>
-        <td>${esc(h.type || 'agent')}</td>
+        <td><span class="type-pill ${h.type === 'snmp' ? 'snmp' : 'agent'}">${esc(typeLabel(h.type))}</span></td>
         <td><span class="state ${stateClass(h.state)}">${stateLabel(h.state)}</span></td>
         ${write ? `<td><div class="row-actions">
           <button class="btn ghost" type="button" data-edit-host="${esc(h.name)}"><svg><use href="#i-edit"/></svg>Изменить</button>
@@ -309,7 +364,7 @@
       cache.secrets = secrets;
       renderMetrics(sum);
       renderHostMini(cache.hosts);
-      renderHostTable(cache.hosts);
+      renderHostTable();
       renderSites(cache.sites);
       if (can('secrets')) renderSecrets(cache.secrets);
       setSync(true);
@@ -585,14 +640,23 @@
   function renderScan(devices) {
     const tb = $('#scanRows');
     if (!devices.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">SNMP-устройств не найдено.</td></tr>'; return; }
-    tb.innerHTML = devices.map((d) => `
+    tb.innerHTML = devices.map((d) => {
+      const title = d.name || d.sysname || d.sysdescr || '—';
+      const sub = d.sysname && d.sysdescr && d.sysname !== d.sysdescr ? d.sysdescr : (d.sysdescr && d.name !== d.sysdescr ? d.sysdescr : '');
+      return `
       <tr>
-        <td><input type="checkbox" class="scan-pick" data-ip="${esc(d.ip)}" data-descr="${esc(d.sysdescr || '')}" data-vendor="${esc(d.vendor || '')}"></td>
+        <td><input type="checkbox" class="scan-pick"
+          data-ip="${esc(d.ip)}"
+          data-name="${esc(d.name || '')}"
+          data-sysname="${esc(d.sysname || '')}"
+          data-descr="${esc(d.sysdescr || '')}"
+          data-vendor="${esc(d.vendor || '')}"></td>
         <td>${esc(d.ip)}</td>
-        <td>${esc(d.sysdescr || '—')}</td>
+        <td><b>${esc(title)}</b>${sub ? `<br><small>${esc(sub)}</small>` : ''}</td>
         <td>${esc(d.vendor || '—')}</td>
         <td><span class="state ${d.added ? '' : 'warn'}">${d.added ? 'Добавлен' : 'Найден'}</span></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     $$('.scan-pick', tb).forEach((c) => c.addEventListener('change', updateSelected));
     updateSelected();
   }
@@ -604,12 +668,18 @@
   $('#scanAll')?.addEventListener('change', (e) => { $$('.scan-pick').forEach((c) => { c.checked = e.target.checked; }); updateSelected(); });
 
   $('#addSelected')?.addEventListener('click', async () => {
-    const picks = $$('.scan-pick').filter((c) => c.checked).map((c) => ({ ip: c.dataset.ip, sysdescr: c.dataset.descr, vendor: c.dataset.vendor }));
+    const picks = $$('.scan-pick').filter((c) => c.checked).map((c) => ({
+      ip: c.dataset.ip,
+      name: c.dataset.name || '',
+      sysname: c.dataset.sysname || '',
+      sysdescr: c.dataset.descr || '',
+      vendor: c.dataset.vendor || '',
+    }));
     if (!picks.length) return;
     const profile = $('#scanProfile').value;
     try {
-      await api('/scan/add', { method: 'POST', body: { devices: picks, snmp_profile_id: profile || null } });
-      toast(`Добавлено узлов: ${picks.length}`);
+      const res = await api('/scan/add', { method: 'POST', body: { devices: picks, snmp_profile_id: profile || null } });
+      toast(`Добавлено узлов: ${res.count || picks.length}${res.added?.length ? ` (${res.added.join(', ')})` : ''}`);
       refresh();
     } catch (e) { toast(e.message || 'Не удалось добавить', false); }
   });
@@ -710,9 +780,39 @@
     return bubble;
   }
 
-  /* ---------- Search ---------- */
+  /* ---------- Search / host filters ---------- */
+  function syncHostFiltersFromUi() {
+    hostFilters = {
+      name: ($('#fHostName')?.value || '').trim().toLowerCase(),
+      address: ($('#fHostAddr')?.value || '').trim().toLowerCase(),
+      site: ($('#fHostSite')?.value || '').trim().toLowerCase(),
+      type: $('#fHostType')?.value || '',
+      state: $('#fHostState')?.value || '',
+    };
+    renderHostTable();
+  }
+  ['fHostName', 'fHostAddr', 'fHostSite'].forEach((id) => {
+    $(`#${id}`)?.addEventListener('input', syncHostFiltersFromUi);
+  });
+  ['fHostType', 'fHostState'].forEach((id) => {
+    $(`#${id}`)?.addEventListener('change', syncHostFiltersFromUi);
+  });
+  $$('.th-sort').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.sort;
+      if (hostSort.key === key) hostSort.dir *= -1;
+      else { hostSort.key = key; hostSort.dir = 1; }
+      renderHostTable();
+    });
+  });
+
   $('#search')?.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
+    if ($('#fHostName')) {
+      $('#fHostName').value = e.target.value.trim();
+      syncHostFiltersFromUi();
+      return;
+    }
     $$('#hostRows tr').forEach((tr) => {
       if (tr.querySelector('.empty')) return;
       tr.hidden = q && !tr.textContent.toLowerCase().includes(q);

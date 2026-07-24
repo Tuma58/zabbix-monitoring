@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -19,24 +18,8 @@ from app.probe import (
     test_snmp,
     test_tcp,
 )
-from app.scan import cidr_is_allowed, scan_snmp
+from app.scan import cidr_is_allowed, sanitize_hostname, scan_snmp, suggest_device_name
 from app.store import JsonStore
-
-HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
-
-
-def sanitize_hostname(name: str, fallback_ip: str = "") -> str:
-    raw = (name or "").strip()
-    if not raw and fallback_ip:
-        raw = f"host-{fallback_ip.replace('.', '-')}"
-    raw = raw.replace(" ", "-")
-    raw = re.sub(r"[^A-Za-z0-9_.-]", "-", raw)
-    raw = re.sub(r"-{2,}", "-", raw).strip("-._")
-    if not raw:
-        raw = "host"
-    if not HOST_RE.match(raw):
-        raw = f"host-{abs(hash(raw)) % 10_000_000}"
-    return raw[:63]
 
 
 TOOLS: list[dict[str, Any]] = [
@@ -456,9 +439,10 @@ class AIAssistant:
             ip = str(dev.get("ip") or "").strip()
             if not ip:
                 continue
-            name = sanitize_hostname(str(dev.get("name") or ""), ip)
+            name = suggest_device_name(dev)
+            alias = str(dev.get("sysdescr") or dev.get("sysname") or "").strip()[:120]
             try:
-                await self.cmk.register_and_activate(name, ip, snmp_community=community)
+                await self.cmk.register_and_activate(name, ip, snmp_community=community, alias=alias)
                 added.append(name)
             except httpx.HTTPError as exc:
                 errors.append(f"{ip}: {exc}")

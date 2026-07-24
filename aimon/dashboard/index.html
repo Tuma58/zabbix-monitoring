@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=auth2">
+  <link rel="stylesheet" href="styles.css?v=hosts1">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -184,10 +184,40 @@
             <div><p class="eyebrow">Каталог</p><h1>Узлы мониторинга</h1><p class="lead">Все хосты Checkmk: агенты и SNMP-устройства.</p></div>
             <button class="btn primary need-write" id="addHost"><svg><use href="#i-plus"/></svg>Добавить узел</button>
           </div>
-          <div class="card">
+            <div class="card">
             <div class="table-wrap">
               <table class="tbl" id="hostTable">
-                <thead><tr><th>Узел</th><th>Адрес</th><th>Площадка</th><th>Тип</th><th>Состояние</th><th></th></tr></thead>
+                <thead>
+                  <tr>
+                    <th><button type="button" class="th-sort" data-sort="name">Узел<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="address">Адрес<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="site">Площадка<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="type">Тип<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="state">Состояние<span class="sort-ind"></span></button></th>
+                    <th class="need-write"></th>
+                  </tr>
+                  <tr class="filter-row">
+                    <th><input type="search" id="fHostName" placeholder="фильтр…" autocomplete="off"></th>
+                    <th><input type="search" id="fHostAddr" placeholder="IP…" autocomplete="off"></th>
+                    <th><input type="search" id="fHostSite" placeholder="площадка…" autocomplete="off"></th>
+                    <th>
+                      <select id="fHostType">
+                        <option value="">Все</option>
+                        <option value="agent">Агент</option>
+                        <option value="snmp">SNMP</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select id="fHostState">
+                        <option value="">Все</option>
+                        <option value="up">Доступен</option>
+                        <option value="down">Недоступен</option>
+                        <option value="warn">Предупреждение</option>
+                      </select>
+                    </th>
+                    <th class="need-write"></th>
+                  </tr>
+                </thead>
                 <tbody id="hostRows"><tr><td colspan="6" class="empty">Узлов пока нет.</td></tr></tbody>
               </table>
             </div>
@@ -212,7 +242,7 @@
             <div class="scan-status" id="scanStatus" hidden></div>
             <div class="table-wrap">
               <table class="tbl" id="scanTable">
-                <thead><tr><th><input type="checkbox" id="scanAll"></th><th>IP</th><th>Устройство (sysDescr)</th><th>Вендор</th><th>Статус</th></tr></thead>
+                <thead><tr><th><input type="checkbox" id="scanAll"></th><th>IP</th><th>Имя / устройство</th><th>Вендор</th><th>Статус</th></tr></thead>
                 <tbody id="scanRows"><tr><td colspan="5" class="empty">Запустите скан, чтобы увидеть найденные устройства.</td></tr></tbody>
               </table>
             </div>
@@ -378,6 +408,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=auth2"></script>
+  <script src="app.js?v=hosts1"></script>
 </body>
 </html>
