@@ -230,47 +230,55 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .ai-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  overflow: hidden;
+  gap: 10px;
+  padding: 0;
+  overflow: visible;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
-.ai-card .btn.wide { margin-top: auto; }
-.ai-hint { color: var(--ink-soft); font-size: 15px; margin: 10px 0 16px; }
+.ai-card .btn.wide {
+  margin: 0 4px 4px;
+  flex: 0 0 auto;
+}
 
 .gera-overview {
   position: relative;
   flex: 1 1 auto;
-  min-height: 340px;
-  border-radius: 14px;
-  overflow: hidden;
+  width: 100%;
+  min-height: 420px;
+  height: clamp(420px, 52vh, 560px);
+  border-radius: 0;
+  overflow: visible;
   cursor: pointer;
-  background: #0a0e12;
+  background: transparent;
 }
 .gera-overview:focus-visible {
   outline: 2px solid var(--indigo-2);
   outline-offset: 2px;
+  border-radius: 12px;
 }
 .gera-overview-bg {
   position: absolute;
   inset: 0;
-  display: block;
+  display: grid;
+  place-items: end center;
 }
 .gera-overview-img {
-  width: 100%;
+  width: auto;
   height: 100%;
-  object-fit: cover;
-  object-position: center 18%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
   display: block;
-  transition: transform .45s ease;
+  margin: 0 auto;
+  filter: drop-shadow(0 18px 28px rgba(45, 52, 54, 0.22));
+  transition: transform .35s ease;
 }
-.gera-overview:hover .gera-overview-img { transform: scale(1.03); }
-.gera-overview::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 55%, rgba(10, 14, 18, 0.35) 100%);
-}
+.gera-overview:hover .gera-overview-img { transform: translateY(-6px) scale(1.02); }
 .visually-hidden {
   position: absolute !important;
   width: 1px; height: 1px;
