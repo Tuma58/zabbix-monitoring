@@ -253,13 +253,16 @@
     const tb = $('#hostRows');
     const write = can('hosts_write');
     const hosts = filteredHosts();
+    const cols = write ? 8 : 7;
     updateSortIndicators();
     if (!hosts.length) {
-      tb.innerHTML = `<tr><td colspan="${write ? 7 : 6}" class="empty">${cache.hosts.length ? 'Нет узлов по фильтру.' : 'Узлов пока нет.'}</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="${cols}" class="empty">${cache.hosts.length ? 'Нет узлов по фильтру.' : 'Узлов пока нет.'}</td></tr>`;
+      updateHostBulk();
       return;
     }
     tb.innerHTML = hosts.map((h) => `
       <tr>
+        ${write ? `<td><input type="checkbox" class="host-pick" value="${esc(h.name)}"></td>` : ''}
         <td><b>${esc(h.name)}</b>${h.alias ? `<br><small>${esc(h.alias)}</small>` : ''}</td>
         <td>${esc(h.address || '—')}</td>
         <td>${esc(h.site_title || h.folder || 'Корень')}</td>
@@ -274,7 +277,34 @@
     if (write) {
       $$('[data-edit-host]', tb).forEach((b) => b.addEventListener('click', () => openHostModal(b.dataset.editHost)));
       $$('[data-del-host]', tb).forEach((b) => b.addEventListener('click', () => deleteHost(b.dataset.delHost)));
+      $$('.host-pick', tb).forEach((c) => c.addEventListener('change', updateHostBulk));
     }
+    updateHostBulk();
+  }
+
+  function selectedHostNames() {
+    return $$('.host-pick').filter((c) => c.checked).map((c) => c.value);
+  }
+
+  function updateHostBulk() {
+    const bar = $('#hostBulkBar');
+    if (!bar) return;
+    const names = selectedHostNames();
+    const count = names.length;
+    bar.hidden = !can('hosts_write');
+    $('#hostBulkCount').textContent = count ? `Выбрано: ${count}` : 'Выберите узлы для переноса';
+    $('#bulkMoveHosts').disabled = !count || !$('#bulkMoveSite')?.value;
+    const all = $('#hostAll');
+    if (all) {
+      const picks = $$('.host-pick');
+      all.checked = picks.length > 0 && picks.every((c) => c.checked);
+      all.indeterminate = picks.some((c) => c.checked) && !all.checked;
+    }
+  }
+
+  function fillBulkMoveSite() {
+    fillSiteSelect($('#bulkMoveSite'), '/');
+    fillSiteSelect($('#scanSite'), $('#scanSite')?.value || '/');
   }
 
   function renderSites(sites) {
@@ -384,6 +414,7 @@
       cache.sites = sites;
       cache.secrets = secrets;
       fillHostSiteFilter();
+      fillBulkMoveSite();
       renderMetrics(sum);
       renderHostMini(cache.hosts);
       renderHostTable();
@@ -647,35 +678,45 @@
     if (!cidr) { toast('Укажите подсеть (CIDR)', false); return; }
     const status = $('#scanStatus');
     status.hidden = false; status.textContent = `Сканирую ${cidr}…`;
-    $('#scanRows').innerHTML = '<tr><td colspan="5" class="empty">Идёт сканирование…</td></tr>';
+    $('#scanRows').innerHTML = '<tr><td colspan="7" class="empty">Идёт сканирование…</td></tr>';
     try {
       const res = await api('/scan', { method: 'POST', body: { cidr, snmp_profile_id: profile || null } });
       const found = res.devices || [];
-      status.textContent = `Найдено устройств: ${found.length} из ${res.scanned ?? '?'} адресов.`;
+      const aiNote = res.ai_classified ? ' · типы уточнены AI' : '';
+      status.textContent = `Найдено устройств: ${found.length} из ${res.scanned ?? '?'} адресов${aiNote}.`;
       renderScan(found);
     } catch (e) {
       status.textContent = e.message || 'Ошибка скана';
-      $('#scanRows').innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message || 'Ошибка')}</td></tr>`;
+      $('#scanRows').innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message || 'Ошибка')}</td></tr>`;
     }
   });
 
   function renderScan(devices) {
     const tb = $('#scanRows');
-    if (!devices.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">SNMP-устройств не найдено.</td></tr>'; return; }
+    if (!devices.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">SNMP-устройств не найдено.</td></tr>'; return; }
     tb.innerHTML = devices.map((d) => {
-      const title = d.name || d.sysname || d.sysdescr || '—';
-      const sub = d.sysname && d.sysdescr && d.sysname !== d.sysdescr ? d.sysdescr : (d.sysdescr && d.name !== d.sysdescr ? d.sysdescr : '');
+      const typeLbl = d.device_type_label || d.device_type || '—';
+      let typeNote = '';
+      if (d.ai_classified) typeNote = 'AI';
+      else if (d.needs_ai) typeNote = 'уточнить';
+      else if (d.device_type_confidence === 'low') typeNote = 'низкая уверенность';
       return `
       <tr>
         <td><input type="checkbox" class="scan-pick"
           data-ip="${esc(d.ip)}"
           data-name="${esc(d.name || '')}"
+          data-alias="${esc(d.alias || '')}"
           data-sysname="${esc(d.sysname || '')}"
           data-descr="${esc(d.sysdescr || '')}"
-          data-vendor="${esc(d.vendor || '')}"></td>
+          data-vendor="${esc(d.vendor || '')}"
+          data-model="${esc(d.model || '')}"
+          data-dtype="${esc(d.device_type || '')}"
+          data-conf="${esc(d.device_type_confidence || '')}"></td>
         <td>${esc(d.ip)}</td>
-        <td><b>${esc(title)}</b>${sub ? `<br><small>${esc(sub)}</small>` : ''}</td>
-        <td>${esc(d.vendor || '—')}</td>
+        <td><b>${esc(d.name || d.sysname || '—')}</b>${d.sysname && d.sysname !== d.name ? `<br><small>${esc(d.sysname)}</small>` : ''}</td>
+        <td>${esc(d.alias || '—')}</td>
+        <td><span class="type-pill device">${esc(typeLbl)}</span>${typeNote ? `<br><small>${esc(typeNote)}</small>` : ''}</td>
+        <td>${esc(d.vendor || '—')}${d.model ? `<br><small>${esc(d.model)}</small>` : ''}</td>
         <td><span class="state ${d.added ? '' : 'warn'}">${d.added ? 'Добавлен' : 'Найден'}</span></td>
       </tr>`;
     }).join('');
@@ -693,17 +734,45 @@
     const picks = $$('.scan-pick').filter((c) => c.checked).map((c) => ({
       ip: c.dataset.ip,
       name: c.dataset.name || '',
+      alias: c.dataset.alias || '',
       sysname: c.dataset.sysname || '',
       sysdescr: c.dataset.descr || '',
       vendor: c.dataset.vendor || '',
+      model: c.dataset.model || '',
+      device_type: c.dataset.dtype || '',
+      device_type_confidence: c.dataset.conf || '',
     }));
     if (!picks.length) return;
     const profile = $('#scanProfile').value;
+    const folder = $('#scanSite')?.value || '/';
     try {
-      const res = await api('/scan/add', { method: 'POST', body: { devices: picks, snmp_profile_id: profile || null } });
-      toast(`Добавлено узлов: ${res.count || picks.length}${res.added?.length ? ` (${res.added.join(', ')})` : ''}`);
+      const res = await api('/scan/add', {
+        method: 'POST',
+        body: { devices: picks, snmp_profile_id: profile || null, folder, use_ai: true },
+      });
+      const site = folder === '/' ? 'корень' : folder;
+      toast(`Добавлено на «${site}»: ${res.count || picks.length}${res.added?.length ? ` (${res.added.join(', ')})` : ''}`);
       refresh();
     } catch (e) { toast(e.message || 'Не удалось добавить', false); }
+  });
+
+  $('#hostAll')?.addEventListener('change', (e) => {
+    $$('.host-pick').forEach((c) => { c.checked = e.target.checked; });
+    updateHostBulk();
+  });
+  $('#bulkMoveSite')?.addEventListener('change', updateHostBulk);
+  $('#bulkMoveHosts')?.addEventListener('click', async () => {
+    const names = selectedHostNames();
+    const folder = $('#bulkMoveSite')?.value || '/';
+    if (!names.length) return;
+    if (!confirm(`Перенести ${names.length} узлов на площадку «${folder === '/' ? 'Корень' : folder}»?`)) return;
+    try {
+      const res = await api('/hosts/move', { method: 'POST', body: { names, folder } });
+      toast(`Перенесено: ${res.count || 0}${res.errors?.length ? ` · ошибок: ${res.errors.length}` : ''}`);
+      refresh();
+    } catch (e) {
+      toast(e.message || 'Не удалось перенести', false);
+    }
   });
 
   $('#addSecret')?.addEventListener('click', () => {
@@ -771,7 +840,7 @@
       const actions = Array.isArray(res.actions) ? res.actions : (res.action ? [res.action] : []);
       const mutated = actions.some((a) =>
         a && [
-          'add_host', 'update_host', 'delete_host', 'add_hosts_from_scan',
+          'add_host', 'update_host', 'delete_host', 'add_hosts_from_scan', 'move_hosts',
           'create_site', 'update_site', 'delete_site',
           'create_user', 'update_user', 'delete_user',
           'create_secret', 'update_secret', 'delete_secret',
@@ -784,7 +853,9 @@
           .filter((a) => a.tool === 'add_host' && a.result?.ok)
           .map((a) => a.result.host)
           .concat(...actions.filter((a) => a.tool === 'add_hosts_from_scan' && a.result?.ok).map((a) => a.result.added || []));
+        const moved = actions.filter((a) => a.tool === 'move_hosts' && a.result?.ok).map((a) => a.result.count || 0);
         if (added.length) toast(`AI добавил: ${added.join(', ')}`);
+        if (moved.length) toast(`AI перенёс узлов: ${moved.reduce((a, b) => a + b, 0)}`);
         refresh();
       } else if (res.action || actions.length) {
         refresh();

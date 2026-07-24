@@ -20,9 +20,10 @@ from app.probe import (
     test_snmp,
     test_tcp,
 )
-from app.scan import cidr_is_allowed, sanitize_hostname, scan_snmp, suggest_device_name
+from app.scan import cidr_is_allowed, sanitize_hostname, scan_snmp, suggest_device_identity
 from app.secrets import SecretBox
 from app.store import JsonStore
+from app.device_ai import classify_devices_with_ai
 
 SECRET_KINDS = ("snmp_v2c", "snmp_v3", "agent_token", "checkmk_automation")
 
@@ -171,7 +172,7 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "add_hosts_from_scan",
-            "description": "Добавить устройства из скана в мониторинг.",
+            "description": "Добавить устройства из скана в мониторинг (с псевдонимом и типом; можно указать площадку folder).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -185,13 +186,32 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
                                 "sysname": {"type": "string"},
                                 "sysdescr": {"type": "string"},
                                 "vendor": {"type": "string"},
+                                "alias": {"type": "string"},
+                                "device_type": {"type": "string"},
                             },
                             "required": ["ip"],
                         },
                     },
                     "snmp_community": {"type": "string"},
+                    "folder": {"type": "string", "description": "Площадка, напр. /office"},
                 },
                 "required": ["devices"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "move_hosts",
+            "description": "Массово перенести узлы на другую площадку (folder).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "names": {"type": "array", "items": {"type": "string"}},
+                    "folder": {"type": "string", "description": "Целевая площадка, напр. /office"},
+                },
+                "required": ["names", "folder"],
                 "additionalProperties": False,
             },
         },
@@ -560,7 +580,8 @@ SYSTEM_PROMPT = """Ты AIMon — ассистент мониторинга на
 Отвечай кратко по-русски. У тебя есть память диалога за последний час — учитывай предыдущие реплики.
 
 Правила:
-- Добавить/подключить узел → сразу add_host (есть IP — не переспрашивай).
+- Добавить/подключить узел → сразу add_host (есть IP — не переспрашивай). Если указана площадка — передай folder.
+- Массовый перенос узлов между площадками → move_hosts.
 - Изменить/удалить узел → update_host / delete_host; площадки → create_site / update_site / delete_site / list_sites.
 - MikroTik/свитч/роутер → type=snmp; сервер Linux/Windows → type=agent.
 - «Проверь / пингани / порт / SNMP / агент» → test_connection.
@@ -807,6 +828,8 @@ class AIAssistant:
                 return await self._scan_network(args)
             if name == "add_hosts_from_scan":
                 return await self._add_hosts_from_scan(args)
+            if name == "move_hosts":
+                return await self._move_hosts(args)
             if name == "test_connection":
                 return await self._test_connection(args)
             if name == "list_users":
@@ -1006,7 +1029,8 @@ class AIAssistant:
         folder = str(args.get("folder") or "/").strip() or "/"
         alias = str(args.get("alias") or "").strip()
         result = await self.cmk.register_and_activate(
-            name, address, snmp_community=community, folder=folder, alias=alias
+            name, address, snmp_community=community, folder=folder, alias=alias,
+            labels={"aimon/device_type": "server" if host_type == "agent" else "network"},
         )
         return {
             "ok": True,
@@ -1128,30 +1152,124 @@ class AIAssistant:
             return {"ok": False, "error": f"CIDR {cidr} is not in scan allowlist"}
         community = str(args.get("snmp_community") or "public")
         result = await scan_snmp(cidr, community)
-        devices = result.get("devices") if isinstance(result, dict) else result
-        return {"ok": True, "cidr": cidr, "count": len(devices or []), "devices": devices}
+        devices = list(result.get("devices") or []) if isinstance(result, dict) else list(result or [])
+        ai_used = False
+        if self.settings.deepseek_api_key and any(d.get("needs_ai") for d in devices):
+            devices = await classify_devices_with_ai(devices, self.settings)
+            ai_used = True
+        compact = [
+            {
+                "ip": d.get("ip"),
+                "name": d.get("name"),
+                "alias": d.get("alias"),
+                "vendor": d.get("vendor"),
+                "model": d.get("model"),
+                "device_type": d.get("device_type"),
+                "device_type_label": d.get("device_type_label"),
+                "sysname": d.get("sysname"),
+                "sysdescr": (d.get("sysdescr") or "")[:160],
+                "needs_ai": bool(d.get("needs_ai")),
+            }
+            for d in devices
+        ]
+        return {
+            "ok": True,
+            "cidr": cidr,
+            "count": len(compact),
+            "scanned": result.get("scanned") if isinstance(result, dict) else None,
+            "ai_classified": ai_used,
+            "devices": compact,
+        }
 
     async def _add_hosts_from_scan(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self.cmk.enabled:
             return {"ok": False, "error": "Checkmk is not configured"}
         community = str(args.get("snmp_community") or "public")
+        folder = str(args.get("folder") or "/").strip() or "/"
+        devices = [d for d in (args.get("devices") or []) if isinstance(d, dict)]
+        if self.settings.deepseek_api_key and any(
+            not d.get("device_type") or d.get("needs_ai") or d.get("device_type") in ("unknown", "network", "host")
+            for d in devices
+        ):
+            devices = [suggest_device_identity(d) for d in devices]
+            devices = await classify_devices_with_ai(devices, self.settings)
+
         added: list[str] = []
+        hosts: list[dict[str, Any]] = []
         errors: list[str] = []
         used: set[str] = set()
-        for dev in args.get("devices") or []:
-            if not isinstance(dev, dict):
-                continue
-            ip = str(dev.get("ip") or "").strip()
+        for raw in devices:
+            ip = str(raw.get("ip") or "").strip()
             if not ip:
                 continue
-            name = suggest_device_name(dev, used=used)
-            alias = str(dev.get("sysdescr") or dev.get("sysname") or "").strip()[:120]
+            dev = suggest_device_identity(raw, used=used)
+            name = str(dev.get("name") or "")
+            alias = str(dev.get("alias") or "").strip()[:120]
+            labels = {
+                "aimon/device_type": str(dev.get("device_type") or "network"),
+                "aimon/vendor": str(dev.get("vendor") or ""),
+            }
             try:
-                await self.cmk.register_and_activate(name, ip, snmp_community=community, alias=alias)
+                await self.cmk.register_and_activate(
+                    name,
+                    ip,
+                    snmp_community=community,
+                    folder=folder,
+                    alias=alias,
+                    labels={k: v for k, v in labels.items() if v},
+                )
                 added.append(name)
+                hosts.append(
+                    {
+                        "name": name,
+                        "ip": ip,
+                        "alias": alias,
+                        "device_type": dev.get("device_type"),
+                        "folder": folder,
+                    }
+                )
             except httpx.HTTPError as exc:
-                errors.append(f"{ip}: {exc}")
-        return {"ok": True, "added": added, "count": len(added), "errors": errors}
+                errors.append(f"{ip}/{name}: {exc}")
+        return {
+            "ok": True,
+            "added": added,
+            "hosts": hosts,
+            "count": len(added),
+            "folder": folder,
+            "errors": errors,
+        }
+
+    async def _move_hosts(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.cmk.enabled:
+            return {"ok": False, "error": "Checkmk is not configured"}
+        folder = str(args.get("folder") or "/").strip() or "/"
+        names = [str(n).strip() for n in (args.get("names") or []) if str(n).strip()]
+        if not names:
+            return {"ok": False, "error": "names required"}
+        moved: list[str] = []
+        skipped: list[str] = []
+        errors: list[str] = []
+        for name in names:
+            try:
+                res = await self.cmk.move_host(name, folder)
+                if res.get("moved"):
+                    moved.append(name)
+                else:
+                    skipped.append(name)
+            except httpx.HTTPError as exc:
+                errors.append(f"{name}: {exc}")
+        try:
+            await self.cmk.activate_changes()
+        except httpx.HTTPError as exc:
+            return {"ok": False, "error": f"activate failed: {exc}", "moved": moved, "errors": errors}
+        return {
+            "ok": True,
+            "folder": folder,
+            "moved": moved,
+            "skipped": skipped,
+            "errors": errors,
+            "count": len(moved),
+        }
 
     def _list_users(self) -> dict[str, Any]:
         denied = self._require_admin()

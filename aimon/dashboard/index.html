@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=hosts4">
+  <link rel="stylesheet" href="styles.css?v=scan5">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -184,11 +184,20 @@
             <div><p class="eyebrow">Каталог</p><h1>Узлы мониторинга</h1><p class="lead">Все хосты Checkmk: агенты и SNMP-устройства.</p></div>
             <button class="btn primary need-write" id="addHost"><svg><use href="#i-plus"/></svg>Добавить узел</button>
           </div>
-            <div class="card">
+          <div class="card">
+            <div class="bulk-bar need-write" id="hostBulkBar" hidden>
+              <span id="hostBulkCount">Выбрано: 0</span>
+              <label class="field inline">
+                <span>Перенести на</span>
+                <select id="bulkMoveSite"></select>
+              </label>
+              <button class="btn primary" id="bulkMoveHosts" type="button" disabled>Перенести</button>
+            </div>
             <div class="table-wrap">
               <table class="tbl" id="hostTable">
                 <thead>
                   <tr>
+                    <th class="need-write"><input type="checkbox" id="hostAll" title="Выбрать все"></th>
                     <th><button type="button" class="th-sort" data-sort="name">Узел<span class="sort-ind"></span></button></th>
                     <th><button type="button" class="th-sort" data-sort="address">Адрес<span class="sort-ind"></span></button></th>
                     <th><button type="button" class="th-sort" data-sort="site">Площадка<span class="sort-ind"></span></button></th>
@@ -198,6 +207,7 @@
                     <th class="need-write"></th>
                   </tr>
                   <tr class="filter-row">
+                    <th class="need-write"></th>
                     <th><input type="search" id="fHostName" placeholder="фильтр…" autocomplete="off"></th>
                     <th><input type="search" id="fHostAddr" placeholder="IP…" autocomplete="off"></th>
                     <th>
@@ -214,8 +224,12 @@
                         <option value="printer">Принтер</option>
                         <option value="server">Сервер</option>
                         <option value="ups">ИБП</option>
+                        <option value="firewall">Файрвол</option>
+                        <option value="camera">Камера</option>
+                        <option value="nas">NAS</option>
                         <option value="network">Сеть</option>
                         <option value="host">Хост</option>
+                        <option value="unknown">Не определено</option>
                       </select>
                     </th>
                     <th>
@@ -236,7 +250,7 @@
                     <th class="need-write"></th>
                   </tr>
                 </thead>
-                <tbody id="hostRows"><tr><td colspan="7" class="empty">Узлов пока нет.</td></tr></tbody>
+                <tbody id="hostRows"><tr><td colspan="8" class="empty">Узлов пока нет.</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -255,17 +269,31 @@
                 <span>SNMP-профиль</span>
                 <select id="scanProfile"><option value="">Выберите профиль</option></select>
               </label>
+              <label class="field">
+                <span>Площадка для добавления</span>
+                <select id="scanSite"></select>
+              </label>
               <button class="btn primary" id="runScan"><svg><use href="#i-radar"/></svg>Сканировать</button>
             </div>
             <div class="scan-status" id="scanStatus" hidden></div>
             <div class="table-wrap">
               <table class="tbl" id="scanTable">
-                <thead><tr><th><input type="checkbox" id="scanAll"></th><th>IP</th><th>Имя / устройство</th><th>Вендор</th><th>Статус</th></tr></thead>
-                <tbody id="scanRows"><tr><td colspan="5" class="empty">Запустите скан, чтобы увидеть найденные устройства.</td></tr></tbody>
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="scanAll"></th>
+                    <th>IP</th>
+                    <th>Имя</th>
+                    <th>Псевдоним</th>
+                    <th>Тип</th>
+                    <th>Вендор</th>
+                    <th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody id="scanRows"><tr><td colspan="7" class="empty">Запустите скан, чтобы увидеть найденные устройства.</td></tr></tbody>
               </table>
             </div>
             <div class="scan-actions">
-              <button class="btn primary" id="addSelected" disabled><svg><use href="#i-plus"/></svg>Добавить выбранные</button>
+              <button class="btn primary" id="addSelected" disabled><svg><use href="#i-plus"/></svg>Добавить выбранные на площадку</button>
             </div>
           </div>
         </section>
@@ -426,6 +454,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=hosts4"></script>
+  <script src="app.js?v=scan5"></script>
 </body>
 </html>

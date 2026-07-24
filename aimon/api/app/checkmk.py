@@ -193,7 +193,19 @@ class CheckmkClient:
             host_type = "snmp" if snmp_tag.startswith("snmp") else "agent"
             name = item.get("id")
             alias = attrs.get("alias", "") or ""
-            dtype = guess_device_type(str(name or ""), alias, monitor_type=host_type)
+            labels = attrs.get("labels") or {}
+            if not isinstance(labels, dict):
+                labels = {}
+            label_dtype = str(labels.get("aimon/device_type") or labels.get("device_type") or "").strip()
+            if label_dtype:
+                dtype = label_dtype
+            else:
+                dtype, _conf = guess_device_type(str(name or ""), alias, monitor_type=host_type)
+            vendor = (
+                str(labels.get("aimon/vendor") or "").strip()
+                or guess_vendor(alias)
+                or guess_vendor(str(name or ""))
+            )
             out.append(
                 {
                     "name": name,
@@ -201,7 +213,7 @@ class CheckmkClient:
                     "type": host_type,
                     "device_type": dtype,
                     "device_type_label": device_type_label(dtype),
-                    "vendor": guess_vendor(alias) or guess_vendor(str(name or "")),
+                    "vendor": vendor,
                     "folder": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
                     "site_path": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
                     "state": "up",
@@ -224,14 +236,23 @@ class CheckmkClient:
         host_type = "snmp" if snmp_tag.startswith("snmp") else "agent"
         name = item.get("id")
         alias = attrs.get("alias", "") or ""
-        dtype = guess_device_type(str(name or ""), alias, monitor_type=host_type)
+        labels = attrs.get("labels") or {}
+        if not isinstance(labels, dict):
+            labels = {}
+        label_dtype = str(labels.get("aimon/device_type") or labels.get("device_type") or "").strip()
+        if label_dtype:
+            dtype = label_dtype
+        else:
+            dtype, _conf = guess_device_type(str(name or ""), alias, monitor_type=host_type)
         return {
             "name": name,
             "address": attrs.get("ipaddress", ""),
             "type": host_type,
             "device_type": dtype,
             "device_type_label": device_type_label(dtype),
-            "vendor": guess_vendor(alias) or guess_vendor(str(name or "")),
+            "vendor": str(labels.get("aimon/vendor") or "").strip()
+            or guess_vendor(alias)
+            or guess_vendor(str(name or "")),
             "folder": folder if str(folder).startswith("/") else folder_id_to_path(str(folder)),
             "alias": alias,
             "attributes": attrs,
@@ -246,12 +267,15 @@ class CheckmkClient:
         folder: str = "/",
         snmp_community: str | None = None,
         alias: str = "",
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         attributes: dict[str, Any] = {}
         if address:
             attributes["ipaddress"] = address
         if alias:
             attributes["alias"] = alias
+        if labels:
+            attributes["labels"] = {str(k): str(v) for k, v in labels.items() if k and v}
         if snmp_community:
             attributes["tag_agent"] = "no-agent"
             attributes["tag_snmp_ds"] = "snmp-v2"
@@ -427,10 +451,16 @@ class CheckmkClient:
         snmp_community: str | None = None,
         folder: str = "/",
         alias: str = "",
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Create host → discover services → activate changes (auto-add flow)."""
         created = await self.create_host(
-            name, address, folder=folder, snmp_community=snmp_community, alias=alias
+            name,
+            address,
+            folder=folder,
+            snmp_community=snmp_community,
+            alias=alias,
+            labels=labels,
         )
         try:
             await self.discover_services(name)
@@ -442,4 +472,5 @@ class CheckmkClient:
             "activated": True,
             "exists": bool(created.get("exists")),
             "folder": folder,
+            "alias": alias,
         }

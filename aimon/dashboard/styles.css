@@ -200,6 +200,24 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .field input:focus, .field select:focus { border-color: var(--indigo-2); box-shadow: 0 0 0 3px rgba(91,123,154,.16); }
 .scan-status { margin-bottom: 16px; padding: 14px; border-radius: 12px; background: rgba(61,90,128,.07); color: var(--indigo); font-size: 15px; font-weight: 600; }
 .scan-actions { margin-top: 18px; }
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--surface-2, #f0ebe3);
+  border-radius: 10px;
+}
+.bulk-bar .field.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.bulk-bar .field.inline span { font-size: 0.9rem; white-space: nowrap; }
+.bulk-bar select { min-width: 160px; }
 
 /* Secrets */
 .secret-list { display: flex; flex-direction: column; gap: 12px; }

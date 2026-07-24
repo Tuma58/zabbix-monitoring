@@ -21,8 +21,9 @@ from app.auth import (
 )
 from app.checkmk import CheckmkClient
 from app.config import get_settings
+from app.device_ai import classify_devices_with_ai
 from app.dns_pin import pin_url_host
-from app.scan import cidr_is_allowed, scan_snmp, suggest_device_name
+from app.scan import cidr_is_allowed, scan_snmp, suggest_device_identity
 from app.secrets import SecretBox
 from app.store import JsonStore
 
@@ -153,6 +154,13 @@ class ScanIn(BaseModel):
 class ScanAddIn(BaseModel):
     devices: list[dict[str, Any]]
     snmp_profile_id: str | None = None
+    folder: str = "/"
+    use_ai: bool = True
+
+
+class HostsMoveIn(BaseModel):
+    names: list[str]
+    folder: str
 
 
 class ChatIn(BaseModel):
@@ -543,7 +551,16 @@ async def scan(payload: ScanIn, _: AuthUser = Depends(require_caps("scan"))) -> 
     if not cidr_is_allowed(payload.cidr, settings.scan_allowlist_cidrs):
         raise HTTPException(400, "CIDR is not in the scan allowlist")
     community = _community_for(payload.snmp_profile_id) or "public"
-    return await scan_snmp(payload.cidr, community)
+    result = await scan_snmp(payload.cidr, community)
+    devices = list(result.get("devices") or [])
+    ai_used = False
+    if settings.deepseek_api_key and any(d.get("needs_ai") for d in devices):
+        devices = await classify_devices_with_ai(devices, settings)
+        ai_used = True
+        result["needs_ai"] = sum(1 for d in devices if d.get("needs_ai"))
+    result["devices"] = devices
+    result["ai_classified"] = ai_used
+    return result
 
 
 @app.post(f"{P}/scan/add")
@@ -551,20 +568,94 @@ async def scan_add(payload: ScanAddIn, _: AuthUser = Depends(require_caps("hosts
     if not cmk.enabled:
         raise HTTPException(503, "Checkmk is not configured")
     community = _community_for(payload.snmp_profile_id) or "public"
-    added = []
+    folder = (payload.folder or "/").strip() or "/"
+    devices = list(payload.devices or [])
+    if payload.use_ai and settings.deepseek_api_key and any(
+        not d.get("device_type") or d.get("needs_ai") or d.get("device_type") in ("unknown", "network", "host")
+        for d in devices
+    ):
+        # enrich before AI
+        devices = [suggest_device_identity(d) for d in devices]
+        devices = await classify_devices_with_ai(devices, settings)
+
+    added: list[dict[str, Any]] = []
+    errors: list[str] = []
     used: set[str] = set()
-    for dev in payload.devices:
-        ip = (dev.get("ip") or "").strip()
+    for raw in devices:
+        if not isinstance(raw, dict):
+            continue
+        ip = (raw.get("ip") or "").strip()
         if not ip:
             continue
-        name = suggest_device_name(dev, used=used)
-        alias = (dev.get("sysdescr") or dev.get("sysname") or "").strip()[:120]
+        dev = suggest_device_identity(raw, used=used)
+        name = str(dev.get("name") or "")
+        alias = str(dev.get("alias") or "").strip()[:120]
+        labels = {
+            "aimon/device_type": str(dev.get("device_type") or "network"),
+            "aimon/vendor": str(dev.get("vendor") or ""),
+        }
         try:
-            await cmk.register_and_activate(name, ip, snmp_community=community, alias=alias)
-            added.append(name)
-        except httpx.HTTPError:
+            await cmk.register_and_activate(
+                name,
+                ip,
+                snmp_community=community,
+                folder=folder,
+                alias=alias,
+                labels={k: v for k, v in labels.items() if v},
+            )
+            added.append(
+                {
+                    "name": name,
+                    "ip": ip,
+                    "alias": alias,
+                    "device_type": dev.get("device_type"),
+                    "device_type_label": dev.get("device_type_label"),
+                    "folder": folder,
+                }
+            )
+        except httpx.HTTPError as exc:
+            errors.append(f"{ip}/{name}: {exc}")
             continue
-    return {"added": added, "count": len(added)}
+    return {
+        "added": [a["name"] for a in added],
+        "hosts": added,
+        "count": len(added),
+        "folder": folder,
+        "errors": errors,
+    }
+
+
+@app.post(f"{P}/hosts/move")
+async def move_hosts(payload: HostsMoveIn, _: AuthUser = Depends(require_caps("hosts_write"))) -> dict[str, Any]:
+    if not cmk.enabled:
+        raise HTTPException(503, "Checkmk is not configured")
+    folder = (payload.folder or "/").strip() or "/"
+    names = [n.strip() for n in (payload.names or []) if str(n).strip()]
+    if not names:
+        raise HTTPException(400, "names required")
+    moved: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+    try:
+        for name in names:
+            try:
+                res = await cmk.move_host(name, folder)
+                if res.get("moved"):
+                    moved.append(name)
+                else:
+                    skipped.append(name)
+            except httpx.HTTPError as exc:
+                errors.append(f"{name}: {exc}")
+        await cmk.activate_changes()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Checkmk error: {exc}") from exc
+    return {
+        "folder": folder,
+        "moved": moved,
+        "skipped": skipped,
+        "errors": errors,
+        "count": len(moved),
+    }
 
 
 # ---------- secrets ----------
