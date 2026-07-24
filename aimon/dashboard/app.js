@@ -775,7 +775,7 @@
           'create_site', 'update_site', 'delete_site',
           'create_user', 'update_user', 'delete_user',
           'create_secret', 'update_secret', 'delete_secret',
-          'create_custom_tool', 'delete_custom_tool',
+          'create_custom_tool', 'update_custom_tool', 'delete_custom_tool',
           'write_config', 'patch_config',
         ].includes(a.tool) && a.result && a.result.ok
       );

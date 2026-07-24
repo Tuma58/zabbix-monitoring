@@ -298,6 +298,7 @@ class JsonStore:
         description: str,
         parameters: dict[str, Any] | None = None,
         steps: list[dict[str, Any]] | None = None,
+        based_on: str = "",
     ) -> dict[str, Any]:
         import re
 
@@ -316,11 +317,52 @@ class JsonStore:
                 "parameters": parameters
                 or {"type": "object", "properties": {}, "additionalProperties": False},
                 "steps": list(steps or []),
+                "based_on": (based_on or "").strip() or None,
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
             }
             tools.append(entry)
             self._write(data)
             return dict(entry)
+
+    def update_ai_tool(self, name: str, **fields: Any) -> dict[str, Any] | None:
+        import re
+
+        n = (name or "").strip().lower()
+        with self._lock:
+            data = self._read()
+            tools = data.setdefault("ai_tools", [])
+            for i, t in enumerate(tools):
+                if str(t.get("name", "")).lower() != n:
+                    continue
+                updated = dict(t)
+                if "name" in fields and fields["name"]:
+                    new_name = str(fields["name"]).strip()
+                    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{1,47}", new_name):
+                        raise ValueError("tool name: latin letters, digits, underscore; start with letter")
+                    if any(
+                        str(x.get("name", "")).lower() == new_name.lower() and str(x.get("name", "")).lower() != n
+                        for x in tools
+                    ):
+                        raise ValueError("tool name already exists")
+                    updated["name"] = new_name
+                if "description" in fields and fields["description"] is not None:
+                    updated["description"] = str(fields["description"]).strip() or updated["name"]
+                if "parameters" in fields and fields["parameters"] is not None:
+                    if not isinstance(fields["parameters"], dict):
+                        raise ValueError("parameters must be object")
+                    updated["parameters"] = fields["parameters"]
+                if "steps" in fields and fields["steps"] is not None:
+                    if not isinstance(fields["steps"], list):
+                        raise ValueError("steps must be array")
+                    updated["steps"] = list(fields["steps"])
+                if "based_on" in fields:
+                    updated["based_on"] = (str(fields["based_on"] or "").strip() or None)
+                updated["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+                tools[i] = updated
+                self._write(data)
+                return dict(updated)
+        return None
 
     def delete_ai_tool(self, name: str) -> bool:
         n = (name or "").strip().lower()

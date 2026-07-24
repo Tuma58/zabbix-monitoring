@@ -415,6 +415,40 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_available_tools",
+            "description": (
+                "Список всех инструментов: встроенные и пользовательские. "
+                "Используй перед созданием кастомного на базе существующего."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["all", "builtin", "custom"],
+                        "description": "Фильтр: all | builtin | custom",
+                    }
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tool",
+            "description": "Получить полное описание инструмента (встроенного или кастомного): параметры и шаги.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_custom_tools",
             "description": "Список пользовательских инструментов ассистента.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
@@ -425,15 +459,19 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "create_custom_tool",
             "description": (
-                "Создать новый инструмент ассистента — сценарий из встроенных tools. "
-                "В args шагов используй плейсхолдеры {{param}} из parameters. "
-                "Пример: steps=[{tool:test_connection, args:{target:'{{host}}', kind:'ping'}}]."
+                "Создать кастомный инструмент. Можно с нуля (steps) или на базе существующего "
+                "(based_on = имя builtin/custom): копируются параметры и шаги, затем применяются "
+                "переданные description/parameters/steps. В args шагов — плейсхолдеры {{param}}."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "description": "Имя латиницей, напр. check_office"},
                     "description": {"type": "string"},
+                    "based_on": {
+                        "type": "string",
+                        "description": "Имя инструмента-основы (builtin или custom)",
+                    },
                     "parameters": {
                         "type": "object",
                         "description": "JSON Schema параметров нового инструмента",
@@ -450,7 +488,43 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
                         },
                     },
                 },
-                "required": ["name", "description", "steps"],
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_custom_tool",
+            "description": (
+                "Изменить кастомный инструмент: описание, параметры, шаги, имя. "
+                "Можно взять шаблон based_on и поверх наложить правки."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Текущее имя кастомного инструмента"},
+                    "new_name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "based_on": {
+                        "type": "string",
+                        "description": "Подставить шаблон с другого инструмента, затем применить steps/parameters",
+                    },
+                    "parameters": {"type": "object"},
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string"},
+                                "args": {"type": "object"},
+                            },
+                            "required": ["tool"],
+                        },
+                    },
+                },
+                "required": ["name"],
                 "additionalProperties": False,
             },
         },
@@ -471,6 +545,14 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
 ]
 
 BUILTIN_TOOL_NAMES = {t["function"]["name"] for t in BUILTIN_TOOLS}
+META_TOOL_NAMES = {
+    "list_available_tools",
+    "get_tool",
+    "list_custom_tools",
+    "create_custom_tool",
+    "update_custom_tool",
+    "delete_custom_tool",
+}
 # keep alias for older imports/tests
 TOOLS = BUILTIN_TOOLS
 
@@ -484,7 +566,7 @@ SYSTEM_PROMPT = """Ты AIMon — ассистент мониторинга на
 - «Проверь / пингани / порт / SNMP / агент» → test_connection.
 - Пользователи дашборда: list_users / create_user / update_user / delete_user — только engineer и user, администраторов не создавать и не менять.
 - SNMP-профили и секреты: list_secrets / create_secret / update_secret / delete_secret.
-- Можно создавать новые инструменты (create_custom_tool) как сценарии из встроенных tools с {{placeholders}}.
+- Инструменты: list_available_tools / get_tool; создавать кастомные на базе существующих — create_custom_tool(based_on=...); менять — update_custom_tool; удалять — delete_custom_tool. Шаги сценария — вызовы других tools с {{placeholders}}.
 - Конфиги: сначала list_configs / read_config / analyze_config, правь через patch_config или write_config.
 - После правки конфига сообщи, нужен ли restart (restart_hint) и какой сервис.
 - Не выдумывай метрики и результаты проверок — только данные tools.
@@ -642,6 +724,8 @@ class AIAssistant:
                 return f"Секрет «{r.get('name')}» сохранён."
             if tool == "create_custom_tool":
                 return f"Инструмент «{r.get('name')}» создан."
+            if tool == "update_custom_tool":
+                return f"Инструмент «{r.get('name')}» обновлён."
             if tool == "test_connection":
                 return "Проверка успешна."
             if tool in ("write_config", "patch_config"):
@@ -756,10 +840,16 @@ class AIAssistant:
                     str(args.get("new") or ""),
                     replace_all=bool(args.get("replace_all")),
                 )
+            if name == "list_available_tools":
+                return self._list_available_tools(args)
+            if name == "get_tool":
+                return self._get_tool(args)
             if name == "list_custom_tools":
                 return self._list_custom_tools()
             if name == "create_custom_tool":
                 return self._create_custom_tool(args)
+            if name == "update_custom_tool":
+                return self._update_custom_tool(args)
             if name == "delete_custom_tool":
                 return self._delete_custom_tool(args)
 
@@ -772,21 +862,88 @@ class AIAssistant:
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)}
 
+    def _allowed_step_tools(self) -> set[str]:
+        names = set(BUILTIN_TOOL_NAMES) - META_TOOL_NAMES
+        for t in self.store.list_ai_tools():
+            n = str(t.get("name") or "")
+            if n:
+                names.add(n)
+        return names
+
+    def _normalize_steps(self, steps: list[Any]) -> tuple[list[dict[str, Any]] | None, str | None]:
+        if not isinstance(steps, list) or not steps:
+            return None, "steps required (non-empty array)"
+        allowed = self._allowed_step_tools()
+        cleaned: list[dict[str, Any]] = []
+        for step in steps:
+            if not isinstance(step, dict):
+                return None, "invalid step"
+            tname = str(step.get("tool") or "").strip()
+            if not tname or tname in META_TOOL_NAMES or tname not in allowed:
+                return None, f"step tool not allowed: {tname}"
+            cleaned.append(
+                {
+                    "tool": tname,
+                    "args": step.get("args") if isinstance(step.get("args"), dict) else {},
+                }
+            )
+        return cleaned, None
+
+    def _params_from_steps(self, steps: list[dict[str, Any]]) -> dict[str, Any]:
+        props: dict[str, Any] = {}
+        for step in steps:
+            for m in re.findall(r"\{\{(\w+)\}\}", json.dumps(step.get("args") or {}, ensure_ascii=False)):
+                props[m] = {"type": "string"}
+        return {"type": "object", "properties": props, "additionalProperties": False}
+
+    def _template_from_tool(self, source_name: str) -> dict[str, Any] | None:
+        """Build description/parameters/steps template from builtin or custom tool."""
+        name = (source_name or "").strip()
+        if not name:
+            return None
+        custom = self.store.get_ai_tool(name)
+        if custom:
+            return {
+                "description": custom.get("description") or custom.get("name"),
+                "parameters": custom.get("parameters")
+                or {"type": "object", "properties": {}, "additionalProperties": False},
+                "steps": list(custom.get("steps") or []),
+                "based_on": custom.get("name"),
+            }
+        for t in BUILTIN_TOOLS:
+            fn = t.get("function") or {}
+            if fn.get("name") == name:
+                if name in META_TOOL_NAMES:
+                    return None
+                params = fn.get("parameters") or {"type": "object", "properties": {}, "additionalProperties": False}
+                props = (params.get("properties") or {}) if isinstance(params, dict) else {}
+                # one step calling the builtin with {{param}} for each property
+                args = {k: "{{" + k + "}}" for k in props.keys()}
+                return {
+                    "description": f"Кастом на базе {name}: {fn.get('description') or name}",
+                    "parameters": params,
+                    "steps": [{"tool": name, "args": args}],
+                    "based_on": name,
+                }
+        return None
+
     async def _run_custom_tool(self, tool: dict[str, Any], args: dict[str, Any], *, _depth: int) -> dict[str, Any]:
-        if _depth >= 3:
+        if _depth >= 4:
             return {"ok": False, "error": "custom tool nesting too deep"}
         steps = tool.get("steps") or []
         if not steps:
             return {"ok": False, "error": "custom tool has no steps"}
+        allowed = self._allowed_step_tools()
         results: list[dict[str, Any]] = []
         for step in steps:
             if not isinstance(step, dict):
                 continue
             tname = str(step.get("tool") or "").strip()
-            if not tname or tname not in BUILTIN_TOOL_NAMES:
+            if not tname or tname in META_TOOL_NAMES or tname not in allowed:
                 return {"ok": False, "error": f"custom step tool not allowed: {tname}"}
-            if tname in ("create_custom_tool", "delete_custom_tool", "list_custom_tools"):
-                return {"ok": False, "error": f"custom step tool not allowed: {tname}"}
+            # prevent trivial infinite self-recursion
+            if tname == tool.get("name") and _depth > 0:
+                return {"ok": False, "error": f"recursive custom tool: {tname}"}
             raw_args = step.get("args") if isinstance(step.get("args"), dict) else {}
             call_args = _subst(raw_args, args)
             if not isinstance(call_args, dict):
@@ -1125,13 +1282,78 @@ class AIAssistant:
             return {"ok": False, "error": "secret not found"}
         return {"ok": True, "secret_id": secret_id, "deleted": True}
 
+    def _list_available_tools(self, args: dict[str, Any]) -> dict[str, Any]:
+        kind = str(args.get("kind") or "all").lower()
+        out: list[dict[str, Any]] = []
+        if kind in ("all", "builtin"):
+            for t in BUILTIN_TOOLS:
+                fn = t.get("function") or {}
+                name = fn.get("name")
+                if not name:
+                    continue
+                out.append(
+                    {
+                        "name": name,
+                        "kind": "builtin",
+                        "meta": name in META_TOOL_NAMES,
+                        "description": fn.get("description") or "",
+                    }
+                )
+        if kind in ("all", "custom"):
+            for t in self.store.list_ai_tools():
+                out.append(
+                    {
+                        "name": t.get("name"),
+                        "kind": "custom",
+                        "meta": False,
+                        "description": t.get("description") or "",
+                        "based_on": t.get("based_on"),
+                        "steps_count": len(t.get("steps") or []),
+                    }
+                )
+        return {"ok": True, "count": len(out), "tools": out}
+
+    def _get_tool(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name required"}
+        custom = self.store.get_ai_tool(name)
+        if custom:
+            return {
+                "ok": True,
+                "kind": "custom",
+                "name": custom.get("name"),
+                "description": custom.get("description"),
+                "parameters": custom.get("parameters"),
+                "steps": custom.get("steps") or [],
+                "based_on": custom.get("based_on"),
+                "created_at": custom.get("created_at"),
+                "updated_at": custom.get("updated_at"),
+            }
+        for t in BUILTIN_TOOLS:
+            fn = t.get("function") or {}
+            if fn.get("name") == name:
+                return {
+                    "ok": True,
+                    "kind": "builtin",
+                    "name": name,
+                    "description": fn.get("description"),
+                    "parameters": fn.get("parameters"),
+                    "meta": name in META_TOOL_NAMES,
+                    "steps": None,
+                }
+        return {"ok": False, "error": f"tool not found: {name}"}
+
     def _list_custom_tools(self) -> dict[str, Any]:
         tools = [
             {
                 "name": t.get("name"),
                 "description": t.get("description"),
+                "based_on": t.get("based_on"),
                 "steps": t.get("steps") or [],
+                "parameters": t.get("parameters"),
                 "created_at": t.get("created_at"),
+                "updated_at": t.get("updated_at"),
             }
             for t in self.store.list_ai_tools()
         ]
@@ -1139,49 +1361,117 @@ class AIAssistant:
 
     def _create_custom_tool(self, args: dict[str, Any]) -> dict[str, Any]:
         name = str(args.get("name") or "").strip()
-        description = str(args.get("description") or "").strip()
-        steps = args.get("steps") or []
-        if not isinstance(steps, list) or not steps:
-            return {"ok": False, "error": "steps required"}
+        if not name:
+            return {"ok": False, "error": "name required"}
         if name.lower() in {n.lower() for n in BUILTIN_TOOL_NAMES}:
             return {"ok": False, "error": "name conflicts with built-in tool"}
-        cleaned: list[dict[str, Any]] = []
-        for step in steps:
-            if not isinstance(step, dict):
-                return {"ok": False, "error": "invalid step"}
-            tname = str(step.get("tool") or "").strip()
-            if tname not in BUILTIN_TOOL_NAMES or tname in (
-                "create_custom_tool",
-                "delete_custom_tool",
-                "list_custom_tools",
-            ):
-                return {"ok": False, "error": f"step tool not allowed: {tname}"}
-            cleaned.append(
-                {
-                    "tool": tname,
-                    "args": step.get("args") if isinstance(step.get("args"), dict) else {},
-                }
-            )
-        params = args.get("parameters")
+
+        based_on = str(args.get("based_on") or "").strip()
+        template: dict[str, Any] = {}
+        if based_on:
+            template = self._template_from_tool(based_on) or {}
+            if not template:
+                return {"ok": False, "error": f"based_on tool not found or not allowed: {based_on}"}
+
+        description = str(args.get("description") or template.get("description") or name).strip()
+        params = args.get("parameters") if args.get("parameters") is not None else template.get("parameters")
+        raw_steps = args.get("steps") if args.get("steps") is not None else template.get("steps")
+
+        if not raw_steps:
+            return {
+                "ok": False,
+                "error": "steps required (укажите steps или based_on с готовыми шагами)",
+            }
+        cleaned, err = self._normalize_steps(list(raw_steps))
+        if err or cleaned is None:
+            return {"ok": False, "error": err or "invalid steps"}
+
         if params is not None and not isinstance(params, dict):
             return {"ok": False, "error": "parameters must be object"}
-        # collect placeholders for default schema
         if not params:
-            props: dict[str, Any] = {}
-            for step in cleaned:
-                for m in re.findall(r"\{\{(\w+)\}\}", json.dumps(step.get("args") or {}, ensure_ascii=False)):
-                    props[m] = {"type": "string"}
-            params = {"type": "object", "properties": props, "additionalProperties": False}
+            params = self._params_from_steps(cleaned)
+
         try:
             entry = self.store.create_ai_tool(
                 name=name,
                 description=description or name,
                 parameters=params,
                 steps=cleaned,
+                based_on=based_on or str(template.get("based_on") or ""),
             )
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
-        return {"ok": True, "name": entry["name"], "description": entry["description"], "steps": entry["steps"]}
+        return {
+            "ok": True,
+            "name": entry["name"],
+            "description": entry["description"],
+            "based_on": entry.get("based_on"),
+            "parameters": entry.get("parameters"),
+            "steps": entry["steps"],
+        }
+
+    def _update_custom_tool(self, args: dict[str, Any]) -> dict[str, Any]:
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "name required"}
+        existing = self.store.get_ai_tool(name)
+        if not existing:
+            return {"ok": False, "error": "custom tool not found"}
+
+        fields: dict[str, Any] = {}
+        based_on = str(args.get("based_on") or "").strip()
+        if based_on:
+            template = self._template_from_tool(based_on)
+            if not template:
+                return {"ok": False, "error": f"based_on tool not found or not allowed: {based_on}"}
+            # apply template first; explicit args override below
+            fields["description"] = template.get("description")
+            fields["parameters"] = template.get("parameters")
+            fields["steps"] = template.get("steps")
+            fields["based_on"] = based_on
+
+        if args.get("new_name") is not None and str(args.get("new_name") or "").strip():
+            new_name = str(args.get("new_name")).strip()
+            if new_name.lower() in {n.lower() for n in BUILTIN_TOOL_NAMES}:
+                return {"ok": False, "error": "new_name conflicts with built-in tool"}
+            fields["name"] = new_name
+        if args.get("description") is not None:
+            fields["description"] = str(args.get("description") or "")
+        if args.get("parameters") is not None:
+            if not isinstance(args.get("parameters"), dict):
+                return {"ok": False, "error": "parameters must be object"}
+            fields["parameters"] = args.get("parameters")
+        if args.get("steps") is not None:
+            cleaned, err = self._normalize_steps(list(args.get("steps") or []))
+            if err or cleaned is None:
+                return {"ok": False, "error": err or "invalid steps"}
+            fields["steps"] = cleaned
+
+        if "steps" in fields:
+            # re-validate after merge against current allowed set
+            cleaned, err = self._normalize_steps(list(fields["steps"]))
+            if err or cleaned is None:
+                return {"ok": False, "error": err or "invalid steps"}
+            fields["steps"] = cleaned
+
+        if not fields:
+            return {"ok": False, "error": "no changes provided"}
+
+        try:
+            updated = self.store.update_ai_tool(name, **fields)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not updated:
+            return {"ok": False, "error": "custom tool not found"}
+        return {
+            "ok": True,
+            "name": updated.get("name"),
+            "description": updated.get("description"),
+            "based_on": updated.get("based_on"),
+            "parameters": updated.get("parameters"),
+            "steps": updated.get("steps") or [],
+            "updated_at": updated.get("updated_at"),
+        }
 
     def _delete_custom_tool(self, args: dict[str, Any]) -> dict[str, Any]:
         name = str(args.get("name") or "").strip()
