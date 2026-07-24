@@ -654,7 +654,7 @@ class AIAssistant:
 
     async def _complete(self, client: httpx.AsyncClient, messages: list[dict[str, Any]]) -> dict[str, Any]:
         resp = await client.post(
-            f"{self.settings.deepseek_base_url}/chat/completions",
+            f"{self.settings.deepseek_base_url.rstrip('/')}/chat/completions",
             headers={"Authorization": f"Bearer {self.settings.deepseek_api_key}"},
             json={
                 "model": self.settings.deepseek_model,

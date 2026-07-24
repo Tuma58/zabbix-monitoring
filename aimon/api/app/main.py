@@ -21,11 +21,16 @@ from app.auth import (
 )
 from app.checkmk import CheckmkClient
 from app.config import get_settings
+from app.dns_pin import pin_url_host
 from app.scan import cidr_is_allowed, scan_snmp, suggest_device_name
 from app.secrets import SecretBox
 from app.store import JsonStore
 
 settings = get_settings()
+# Docker embedded DNS sometimes fails for api.deepseek.com — pin IPv4 early.
+if settings.deepseek_api_key:
+    pin_url_host(settings.deepseek_base_url or "https://api.deepseek.com")
+
 app = FastAPI(title=settings.app_name)
 app.add_middleware(
     CORSMiddleware,
@@ -607,11 +612,17 @@ async def ai_chat(payload: ChatIn = Body(...), user: AuthUser = Depends(require_
     if not settings.deepseek_api_key:
         raise HTTPException(404, "AI service is not configured")
     try:
+        pin_url_host(settings.deepseek_base_url or "https://api.deepseek.com")
         return await assistant.chat(
             payload.message,
             session_id=payload.session_id or "default",
             actor=user,
         )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            502,
+            f"DeepSeek недоступен (DNS/сеть): {exc}. Проверьте исходящий доступ к api.deepseek.com",
+        ) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"DeepSeek error: {exc}") from exc
 
