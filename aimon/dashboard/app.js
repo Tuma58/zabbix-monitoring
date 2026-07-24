@@ -825,8 +825,6 @@
     });
     const status = $('#geraStatus');
     if (status) status.textContent = next === 'thinking' ? 'Думаю…' : 'Жду команду';
-    const ovStatus = $('#geraOverviewStatus');
-    if (ovStatus) ovStatus.textContent = next === 'thinking' ? 'Думаю…' : 'Жду команду';
     const fab = $('#aiFab');
     if (fab) {
       fab.classList.toggle('thinking', next === 'thinking');

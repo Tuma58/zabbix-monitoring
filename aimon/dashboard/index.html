@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=gera4">
+  <link rel="stylesheet" href="styles.css?v=gera5">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -148,22 +148,21 @@
             </section>
 
             <section class="card ai-card">
-              <div class="card-head"><h2>Гера</h2><span class="badge">AI-ассистент</span></div>
-              <div class="gera-overview" data-goto="assistant" role="button" tabindex="0" title="Открыть чат с Герой">
-                <picture>
+              <div class="gera-overview" data-goto="assistant" role="button" tabindex="0" title="AI ассистент">
+                <picture class="gera-overview-bg">
                   <source srcset="assets/gera-overview.webp" type="image/webp">
                   <img
                     class="gera-overview-img"
                     src="assets/gera-overview.jpg"
-                    alt="Гера — AI-ассистент AIMon"
-                    width="600"
+                    alt="Гера"
+                    width="720"
                     height="900"
                     loading="lazy"
                     decoding="async"
                   >
                 </picture>
-                <div class="gera mini gera-overview-status" data-state="idle" id="geraMini" aria-hidden="true">
-                  <div class="gera-rings"><span></span><span></span><span></span></div>
+                <!-- hidden media for idle/thinking state sync -->
+                <div class="gera mini visually-hidden" data-state="idle" id="geraMini" aria-hidden="true">
                   <div class="gera-face">
                     <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="metadata">
                       <source src="assets/gera-idle.webm" type="video/webm">
@@ -175,10 +174,8 @@
                     </video>
                   </div>
                 </div>
-                <span class="gera-overview-caption" id="geraOverviewStatus">Жду команду</span>
               </div>
-              <p class="ai-hint">Гера ждёт команду: «добавь микротик 10.0.0.1», «что сломалось», «типы устройств».</p>
-              <button class="btn primary wide" data-goto="assistant">Открыть чат с Герой</button>
+              <button class="btn primary wide" data-goto="assistant">AI ассистент</button>
             </section>
           </div>
         </section>
@@ -516,6 +513,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=gera4"></script>
+  <script src="app.js?v=gera5"></script>
 </body>
 </html>
