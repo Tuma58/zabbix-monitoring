@@ -136,7 +136,19 @@
     if (name === 'settings' && can('users')) loadUsers();
   }
   $$('.nav-item').forEach((n) => n.addEventListener('click', (e) => { e.preventDefault(); showView(n.dataset.view); }));
-  $$('[data-goto]').forEach((b) => b.addEventListener('click', () => showView(b.dataset.goto)));
+  $$('[data-goto]').forEach((b) => {
+    const go = () => {
+      showView(b.dataset.goto);
+      if (b.dataset.goto === 'assistant') $('#chatInput')?.focus();
+    };
+    b.addEventListener('click', go);
+    b.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        go();
+      }
+    });
+  });
   window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (v) showView(v); });
 
   $('#navOpen')?.addEventListener('click', () => body.classList.add('nav-open'));
