@@ -34,6 +34,28 @@ from app.device_ai import classify_devices_with_ai
 
 SECRET_KINDS = ("snmp_v2c", "snmp_v3", "agent_token", "checkmk_automation")
 
+# Checkmk version mirrored in dashboard/agents
+_CMK_AGENT_VERSION = "2.3.0p48"
+
+# Mapping: OS family → package filename served under /agents/linux/
+_LINUX_PACKAGES: dict[str, dict[str, str]] = {
+    "deb": {
+        "file": f"check-mk-agent_{_CMK_AGENT_VERSION}-1_all.deb",
+        "families": "Ubuntu, Debian",
+        "install": "apt-get install -y {pkg} || dpkg -i {pkg}",
+    },
+    "rpm": {
+        "file": f"check-mk-agent-{_CMK_AGENT_VERSION}-1.noarch.rpm",
+        "families": "RHEL, AlmaLinux, Rocky, CentOS",
+        "install": "rpm -Uvh {pkg} || dnf install -y {pkg}",
+    },
+    "sh": {
+        "file": "check_mk_agent.linux",
+        "families": "Любой Linux (без пакетного менеджера)",
+        "install": "chmod +x {pkg} && cp {pkg} /usr/local/bin/check_mk_agent",
+    },
+}
+
 BUILTIN_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -469,6 +491,104 @@ BUILTIN_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    # ── agent distribution tools ──────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "list_agent_packages",
+            "description": (
+                "Список дистрибутивов Checkmk-агента, доступных на этом сервере AIMon. "
+                "Возвращает версию, все пакеты (deb/rpm/sh/msi/ctl) с URL для скачивания "
+                "и готовые команды установки. Вызывай при вопросах «какие агенты есть», "
+                "«покажи дистрибутивы», «что скачать для Linux/Windows»."
+            ),
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_agent_install_command",
+            "description": (
+                "Готовая команда установки Checkmk-агента одной строкой для указанной ОС. "
+                "Команда скачивает скрипт с дашборда и запускает установку + авторегистрацию. "
+                "os: linux | windows. Параметры server и token — опционально."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "os": {
+                        "type": "string",
+                        "enum": ["linux", "windows"],
+                        "description": "Целевая ОС агента",
+                    },
+                    "server": {
+                        "type": "string",
+                        "description": "IP или DNS сервера AIMon (если не указан — выдаётся шаблон с HOST)",
+                    },
+                    "token": {
+                        "type": "string",
+                        "description": "Токен регистрации агента (необязательно)",
+                    },
+                    "hostname": {
+                        "type": "string",
+                        "description": "Имя узла в мониторинге (auto = hostname -f)",
+                    },
+                    "use_http": {
+                        "type": "boolean",
+                        "description": "Использовать HTTP вместо HTTPS (порт 7081)",
+                    },
+                },
+                "required": ["os"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_agent_package_url",
+            "description": (
+                "Прямой URL конкретного пакета агента для ручной загрузки. "
+                "package: deb | rpm | sh | msi | ctl | ctl_gz. "
+                "server — адрес AIMon (без порта)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "package": {
+                        "type": "string",
+                        "enum": ["deb", "rpm", "sh", "msi", "ctl", "ctl_gz"],
+                    },
+                    "server": {"type": "string"},
+                    "use_http": {"type": "boolean"},
+                },
+                "required": ["package"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_agent_status",
+            "description": (
+                "Проверить статус Checkmk-агента на удалённом узле: "
+                "доступность порта 6556, ответ агента, версию. "
+                "Используй вместе с test_connection(kind=checkmk_agent)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string", "description": "IP или hostname узла"},
+                    "port": {"type": "integer", "description": "Порт агента (по умолчанию 6556)"},
+                },
+                "required": ["target"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    # ── end agent distribution tools ──────────────────────────────────────────
     {
         "type": "function",
         "function": {
@@ -635,6 +755,7 @@ SYSTEM_PROMPT = """Ты Гера — AI-ассистент мониторинг�
 - Изменить/удалить узел → update_host / delete_host; площадки → create_site / update_site / delete_site / list_sites.
 - MikroTik/свитч/роутер → type=snmp; сервер Linux/Windows → type=agent.
 - «Проверь / пингани / порт / SNMP / агент» → test_connection.
+- Дистрибутивы агента Checkmk: list_agent_packages — список всех пакетов и скриптов; get_agent_install_command(os, server, token) — готовая команда «одной строкой»; get_agent_package_url(package) — прямой URL файла; check_agent_status(target) — проверить агент на узле.
 - Пользователи дашборда: list_users / create_user / update_user / delete_user — только engineer и user, администраторов не создавать и не менять.
 - SNMP-профили и секреты: list_secrets / create_secret / update_secret / delete_secret.
 - Инструменты: list_available_tools / get_tool; создавать кастомные на базе существующих — create_custom_tool(based_on=...); менять — update_custom_tool; удалять — delete_custom_tool. Шаги сценария — вызовы других tools с {{placeholders}}.
@@ -799,6 +920,10 @@ class AIAssistant:
                 return f"Инструмент «{r.get('name')}» обновлён."
             if tool == "test_connection":
                 return "Проверка успешна."
+            if tool == "check_agent_status":
+                return f"Агент на {(r.get('target') or '')} доступен."
+            if tool == "get_agent_install_command":
+                return f"Команда установки ({r.get('os','')}):\n```\n{r.get('command','')}\n```"
             if tool in ("write_config", "patch_config"):
                 return f"Конфиг «{r.get('path')}» обновлён."
         for a in actions:
@@ -915,6 +1040,14 @@ class AIAssistant:
                     str(args.get("new") or ""),
                     replace_all=bool(args.get("replace_all")),
                 )
+            if name == "list_agent_packages":
+                return self._list_agent_packages()
+            if name == "get_agent_install_command":
+                return self._get_agent_install_command(args)
+            if name == "get_agent_package_url":
+                return self._get_agent_package_url(args)
+            if name == "check_agent_status":
+                return await self._check_agent_status(args)
             if name == "list_available_tools":
                 return self._list_available_tools(args)
             if name == "get_tool":
@@ -1742,6 +1875,215 @@ class AIAssistant:
         if not self.store.delete_ai_tool(name):
             return {"ok": False, "error": "tool not found"}
         return {"ok": True, "name": name, "deleted": True}
+
+    # ── agent distribution helpers ────────────────────────────────────────────
+
+    def _agent_base_url(self, server: str = "", use_http: bool = False) -> str:
+        host = (server or "HOST").strip().rstrip("/")
+        if use_http:
+            return f"http://{host}:7081"
+        return f"https://{host}:7444"
+
+    def _list_agent_packages(self) -> dict[str, Any]:
+        packages = [
+            {
+                "id": "deb",
+                "filename": _LINUX_PACKAGES["deb"]["file"],
+                "os": "Linux (Ubuntu / Debian)",
+                "url_path": f"/agents/linux/{_LINUX_PACKAGES['deb']['file']}",
+                "description": "deb-пакет для Ubuntu 20.04+, Debian 11+",
+            },
+            {
+                "id": "rpm",
+                "filename": _LINUX_PACKAGES["rpm"]["file"],
+                "os": "Linux (RHEL / AlmaLinux / Rocky / CentOS)",
+                "url_path": f"/agents/linux/{_LINUX_PACKAGES['rpm']['file']}",
+                "description": "RPM-пакет для RHEL 8/9 и клонов",
+            },
+            {
+                "id": "sh",
+                "filename": _LINUX_PACKAGES["sh"]["file"],
+                "os": "Linux (любой, без пакетного менеджера)",
+                "url_path": f"/agents/linux/{_LINUX_PACKAGES['sh']['file']}",
+                "description": "Shell-агент — копируется в /usr/local/bin, запускается через socket",
+            },
+            {
+                "id": "ctl",
+                "filename": "cmk-agent-ctl",
+                "os": "Linux",
+                "url_path": "/agents/linux/cmk-agent-ctl",
+                "description": "Agent Controller — TLS-транспорт, двоичный файл (amd64)",
+            },
+            {
+                "id": "ctl_gz",
+                "filename": "cmk-agent-ctl.gz",
+                "os": "Linux",
+                "url_path": "/agents/linux/cmk-agent-ctl.gz",
+                "description": "Agent Controller (gzip-сжатый)",
+            },
+            {
+                "id": "msi",
+                "filename": "check_mk_agent.msi",
+                "os": "Windows",
+                "url_path": "/agents/windows/check_mk_agent.msi",
+                "description": "MSI-инсталлятор Windows-агента (тихая установка /qn)",
+            },
+        ]
+        scripts = [
+            {
+                "filename": "install-linux.sh",
+                "url_path": "/agents/install-linux.sh",
+                "description": "Скрипт «одна команда»: скачать + установить + зарегистрировать (Linux)",
+            },
+            {
+                "filename": "install-windows.ps1",
+                "url_path": "/agents/install-windows.ps1",
+                "description": "PowerShell-скрипт «одна команда»: скачать + установить + зарегистрировать (Windows)",
+            },
+        ]
+        return {
+            "ok": True,
+            "checkmk_version": _CMK_AGENT_VERSION,
+            "packages": packages,
+            "scripts": scripts,
+            "note": (
+                "Полный URL = base_url + url_path. "
+                "base_url по умолчанию https://HOST:7444 (HTTPS) или http://HOST:7081 (HTTP). "
+                "Используй get_agent_install_command для готовых команд установки."
+            ),
+        }
+
+    def _get_agent_install_command(self, args: dict[str, Any]) -> dict[str, Any]:
+        os_name = str(args.get("os") or "linux").lower()
+        server = str(args.get("server") or "").strip()
+        token = str(args.get("token") or "").strip()
+        hostname = str(args.get("hostname") or "auto").strip() or "auto"
+        use_http = bool(args.get("use_http"))
+        base = self._agent_base_url(server, use_http)
+
+        token_flag = f" --token {token}" if token else ""
+        hostname_flag = f" --hostname {hostname}" if hostname != "auto" else ""
+
+        if os_name == "windows":
+            # PowerShell one-liner
+            server_val = server or "HOST"
+            token_arg = f" -Token {token}" if token else ""
+            hostname_arg = f" -Hostname {hostname}" if hostname not in ("auto", "") else ""
+            if use_http:
+                irm_url = f"http://{server_val}:7081/agents/install-windows.ps1"
+                base_arg = f" -BaseUrl http://{server_val}:7081"
+                cert_skip = ""
+            else:
+                irm_url = f"https://{server_val}:7444/agents/install-windows.ps1"
+                base_arg = ""
+                cert_skip = "[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }\n"
+            cmd = (
+                f"{cert_skip}"
+                f'& ([scriptblock]::Create((irm "{irm_url}"))) '
+                f"-Server {server_val}{base_arg}{token_arg}{hostname_arg}"
+            )
+            return {
+                "ok": True,
+                "os": "windows",
+                "command": cmd,
+                "shell": "powershell",
+                "note": "Запустите PowerShell от имени Администратора.",
+            }
+        else:
+            # Linux bash one-liner
+            server_val = server or "HOST"
+            curl_flags = "-fsSLk" if not use_http else "-fsSL"
+            script_url = f"{base}/agents/install-linux.sh"
+            server_flag = f" --server {server_val}"
+            cmd = (
+                f'curl {curl_flags} "{script_url}" '
+                f"| sudo bash -s --{server_flag}{token_flag}{hostname_flag}"
+            )
+            return {
+                "ok": True,
+                "os": "linux",
+                "command": cmd,
+                "shell": "bash",
+                "note": "Запустите с правами root (sudo).",
+            }
+
+    def _get_agent_package_url(self, args: dict[str, Any]) -> dict[str, Any]:
+        pkg = str(args.get("package") or "").lower().strip()
+        server = str(args.get("server") or "").strip()
+        use_http = bool(args.get("use_http"))
+        base = self._agent_base_url(server, use_http)
+
+        paths: dict[str, str] = {
+            "deb":    f"/agents/linux/{_LINUX_PACKAGES['deb']['file']}",
+            "rpm":    f"/agents/linux/{_LINUX_PACKAGES['rpm']['file']}",
+            "sh":     "/agents/linux/check_mk_agent.linux",
+            "msi":    "/agents/windows/check_mk_agent.msi",
+            "ctl":    "/agents/linux/cmk-agent-ctl",
+            "ctl_gz": "/agents/linux/cmk-agent-ctl.gz",
+        }
+        if pkg not in paths:
+            return {"ok": False, "error": f"unknown package: {pkg}. Available: {', '.join(paths)}"}
+
+        path = paths[pkg]
+        url = f"{base}{path}"
+        filenames: dict[str, str] = {
+            "deb":    _LINUX_PACKAGES["deb"]["file"],
+            "rpm":    _LINUX_PACKAGES["rpm"]["file"],
+            "sh":     "check_mk_agent.linux",
+            "msi":    "check_mk_agent.msi",
+            "ctl":    "cmk-agent-ctl",
+            "ctl_gz": "cmk-agent-ctl.gz",
+        }
+        curl_flags = "-fsSLk" if not use_http else "-fsSL"
+        download_cmd = f'curl {curl_flags} -O "{url}"'
+        return {
+            "ok": True,
+            "package": pkg,
+            "url": url,
+            "filename": filenames[pkg],
+            "checkmk_version": _CMK_AGENT_VERSION,
+            "download_cmd": download_cmd,
+        }
+
+    async def _check_agent_status(self, args: dict[str, Any]) -> dict[str, Any]:
+        target = str(args.get("target") or "").strip()
+        if not target:
+            return {"ok": False, "error": "target required"}
+        port = int(args.get("port") or 6556)
+        known = await self._known_hosts()
+        ok_guard, host_or_err = self._guard_target(target, known)
+        if not ok_guard:
+            return {"ok": False, "error": host_or_err}
+        result = await test_checkmk_agent(host_or_err, port)
+        if not result.get("ok"):
+            return {
+                "ok": False,
+                "target": target,
+                "port": port,
+                "reachable": False,
+                "error": result.get("error") or "agent not reachable",
+                "hint": (
+                    f"Убедитесь, что агент установлен и слушает порт {port}. "
+                    f"Команда установки: get_agent_install_command(os='linux', server=…)"
+                ),
+            }
+        banner = str(result.get("banner") or "")
+        version = ""
+        for line in banner.splitlines():
+            if line.startswith("Version:") or "check_mk_agent" in line.lower():
+                version = line.strip()
+                break
+        return {
+            "ok": True,
+            "target": target,
+            "port": port,
+            "reachable": True,
+            "version_line": version or "(версия не определена из баннера)",
+            "response_ms": result.get("response_ms"),
+            "banner_preview": banner[:400] if banner else "",
+        }
+
+    # ── end agent distribution helpers ────────────────────────────────────────
 
     async def _test_connection(self, args: dict[str, Any]) -> dict[str, Any]:
         target = str(args.get("target") or "").strip()
