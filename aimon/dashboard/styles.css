@@ -244,8 +244,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   position: relative;
   flex: 1 1 auto;
   width: 100%;
-  min-height: 360px;
-  height: clamp(360px, 48vh, 520px);
+  min-height: 380px;
+  height: clamp(380px, 50vh, 540px);
   border-radius: 0;
   overflow: visible;
   cursor: pointer;
@@ -261,11 +261,13 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   inset: 0;
   display: grid;
   place-items: center;
+  overflow: visible;
 }
 .gera-overview-img {
-  width: min(100%, 420px);
+  width: min(100%, 460px);
   height: auto;
-  max-height: 92%;
+  max-width: 100%;
+  max-height: 94%;
   object-fit: contain;
   object-position: center center;
   display: block;
