@@ -812,11 +812,12 @@
   }
 
   /* ---------- Gera ---------- */
-  const GERA_AVA = 'assets/gera.jpg';
+  const GERA_AVA = 'assets/gera-bot-still.jpg';
   const GERA_WELCOME = 'Здравствуйте! Я Гера. Могу добавить узлы, проверить ping/порт/SNMP, разобрать конфиги. Например: «проверь 10.0.0.1», «покажи типы устройств», «добавь сервер 10.0.0.5».';
 
   function setGeraState(state) {
     const next = state === 'thinking' ? 'thinking' : 'idle';
+    const rate = next === 'thinking' ? 1.35 : 1;
     $$('.gera').forEach((el) => {
       el.dataset.state = next;
       const idle = $('.gera-vid.idle', el);
@@ -824,11 +825,13 @@
       if (idle && think) {
         if (next === 'thinking') {
           try { idle.pause(); } catch (_) {}
+          think.playbackRate = rate;
           think.currentTime = 0;
           const p = think.play();
           if (p && p.catch) p.catch(() => {});
         } else {
           try { think.pause(); } catch (_) {}
+          idle.playbackRate = rate;
           idle.currentTime = 0;
           const p = idle.play();
           if (p && p.catch) p.catch(() => {});
@@ -840,10 +843,11 @@
     const fab = $('#aiFab');
     if (fab) {
       fab.classList.toggle('thinking', next === 'thinking');
-      const img = $('img', fab);
-      if (img) {
-        const want = next === 'thinking' ? 'assets/gera-thinking.webp' : 'assets/gera-idle.webp';
-        if (!img.src.endsWith(want.split('/').pop())) img.src = want;
+      const face = $('#aiFabFace') || $('video', fab);
+      if (face) {
+        face.playbackRate = rate;
+        const p = face.play();
+        if (p && p.catch) p.catch(() => {});
       }
     }
   }
@@ -854,11 +858,16 @@
       const p = v.play();
       if (p && p.catch) p.catch(() => {});
     });
+    const fabFace = $('#aiFabFace');
+    if (fabFace) {
+      const p = fabFace.play();
+      if (p && p.catch) p.catch(() => {});
+    }
   }
   bootGeraVideos();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      $$('.gera-vid').forEach((v) => { try { v.pause(); } catch (_) {} });
+      $$('.gera-vid, #aiFabFace').forEach((v) => { try { v.pause(); } catch (_) {} });
     } else {
       setGeraState($('#geraHero')?.dataset.state || 'idle');
     }

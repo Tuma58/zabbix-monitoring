@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FAF8F5">
   <title>AIMon — AI-мониторинг</title>
   <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
-  <link rel="stylesheet" href="styles.css?v=gera7">
+  <link rel="stylesheet" href="styles.css?v=gera8">
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
@@ -171,13 +171,13 @@
                 <!-- hidden media for idle/thinking state sync -->
                 <div class="gera mini visually-hidden" data-state="idle" id="geraMini" aria-hidden="true">
                   <div class="gera-face">
-                    <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="metadata">
-                      <source src="assets/gera-idle.webm" type="video/webm">
-                      <source src="assets/gera-idle.mp4" type="video/mp4">
+                    <video class="gera-vid idle" poster="assets/gera-bot-still.jpg" muted loop playsinline autoplay preload="metadata">
+                      <source src="assets/gera-bot-idle.webm" type="video/webm">
+                      <source src="assets/gera-bot-idle.mp4" type="video/mp4">
                     </video>
-                    <video class="gera-vid think" poster="assets/gera-thinking.jpg" muted loop playsinline preload="metadata">
-                      <source src="assets/gera-thinking.webm" type="video/webm">
-                      <source src="assets/gera-thinking.mp4" type="video/mp4">
+                    <video class="gera-vid think" poster="assets/gera-bot-still.jpg" muted loop playsinline preload="metadata">
+                      <source src="assets/gera-bot-idle.webm" type="video/webm">
+                      <source src="assets/gera-bot-idle.mp4" type="video/mp4">
                     </video>
                   </div>
                 </div>
@@ -352,13 +352,13 @@
               <div class="gera-rings"><span></span><span></span><span></span></div>
               <div class="gera-scan" aria-hidden="true"></div>
               <div class="gera-face">
-                <video class="gera-vid idle" poster="assets/gera-idle.jpg" muted loop playsinline autoplay preload="auto" aria-label="Гера">
-                  <source src="assets/gera-idle.webm" type="video/webm">
-                  <source src="assets/gera-idle.mp4" type="video/mp4">
+                <video class="gera-vid idle" poster="assets/gera-bot-still.jpg" muted loop playsinline autoplay preload="auto" aria-label="Гера">
+                  <source src="assets/gera-bot-idle.webm" type="video/webm">
+                  <source src="assets/gera-bot-idle.mp4" type="video/mp4">
                 </video>
-                <video class="gera-vid think" poster="assets/gera-thinking.jpg" muted loop playsinline preload="auto">
-                  <source src="assets/gera-thinking.webm" type="video/webm">
-                  <source src="assets/gera-thinking.mp4" type="video/mp4">
+                <video class="gera-vid think" poster="assets/gera-bot-still.jpg" muted loop playsinline preload="auto">
+                  <source src="assets/gera-bot-idle.webm" type="video/webm">
+                  <source src="assets/gera-bot-idle.mp4" type="video/mp4">
                 </video>
               </div>
               <div class="gera-meta">
@@ -368,7 +368,7 @@
             </div>
             <div class="chat" id="chat">
               <div class="msg bot">
-                <img class="msg-ava" src="assets/gera.jpg" alt="">
+                <img class="msg-ava" src="assets/gera-bot-still.jpg" alt="">
                 <div class="bubble">Здравствуйте! Я Гера. Могу добавить узлы, проверить ping/порт/SNMP, разобрать конфиги. Например: «проверь 10.0.0.1», «покажи типы устройств», «добавь сервер 10.0.0.5».</div>
               </div>
             </div>
@@ -419,7 +419,10 @@
 
   <!-- Floating AI launcher -->
   <button class="ai-fab" id="aiFab" aria-label="Открыть Геру">
-    <img src="assets/gera-idle.webp" alt="Гера">
+    <video class="ai-fab-face" id="aiFabFace" autoplay muted loop playsinline poster="assets/gera-bot-still.jpg" aria-hidden="true">
+      <source src="assets/gera-bot-idle.webm" type="video/webm">
+      <source src="assets/gera-bot-idle.mp4" type="video/mp4">
+    </video>
     <span class="fab-ring"></span>
   </button>
 
@@ -519,6 +522,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=gera7"></script>
+  <script src="app.js?v=gera8"></script>
 </body>
 </html>

@@ -302,15 +302,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .gera.mini { margin: 8px auto 4px; }
 .gera-face {
   position: relative;
-  width: 132px;
-  height: 132px;
+  width: 148px;
+  height: 148px;
   border-radius: 50%;
   overflow: hidden;
   z-index: 2;
   box-shadow:
     0 0 0 3px rgba(61, 184, 197, 0.35),
     0 18px 40px -16px rgba(26, 34, 40, 0.55);
-  background: #0d1418;
+  background: #f3eee6;
 }
 .gera.mini .gera-face { width: 96px; height: 96px; }
 .gera-vid,
@@ -320,8 +320,10 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
   transition: opacity .45s ease;
   pointer-events: none;
+  background: #f3eee6;
 }
 .gera-vid.idle,
 .gera-img.idle { opacity: 1; z-index: 1; }
@@ -474,10 +476,12 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   background: transparent;
   box-shadow: 0 12px 28px -10px rgba(26, 34, 40, 0.45);
 }
-.ai-fab img {
+.ai-fab img,
+.ai-fab-face {
   position: relative; z-index: 2;
   width: 64px; height: 64px; border-radius: 50%;
-  object-fit: cover; display: block;
+  object-fit: cover; object-position: center center; display: block;
+  background: #f3eee6;
   box-shadow: 0 0 0 2px rgba(61, 184, 197, 0.55);
 }
 .ai-fab .fab-ring {
@@ -485,7 +489,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   border: 1.5px solid rgba(61, 184, 197, 0.5);
   opacity: 0; animation: gera-ring 2.8s ease-out infinite;
 }
-.ai-fab.thinking img {
+.ai-fab.thinking img,
+.ai-fab.thinking .ai-fab-face {
   box-shadow: 0 0 0 2px rgba(122, 212, 222, 0.8), 0 0 18px rgba(61, 184, 197, 0.55);
 }
 .ai-fab.thinking .fab-ring {
@@ -497,14 +502,18 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .gera-rings span, .gera-scan, .gera-status::before, .ai-fab .fab-ring {
     animation: none !important;
   }
-  .gera-vid { display: none !important; }
-  .gera-face::after {
+  .gera-vid, .ai-fab-face { display: none !important; }
+  .gera-face::after,
+  .ai-fab::after {
     content: "";
     position: absolute; inset: 0;
-    background: center / cover no-repeat url("assets/gera-idle.jpg");
+    border-radius: 50%;
+    background: center / cover no-repeat url("assets/gera-bot-still.jpg");
   }
-  .gera[data-state="thinking"] .gera-face::after {
-    background-image: url("assets/gera-thinking.jpg");
+  .ai-fab::after {
+    inset: 0;
+    z-index: 2;
+    box-shadow: 0 0 0 2px rgba(61, 184, 197, 0.55);
   }
 }
 
