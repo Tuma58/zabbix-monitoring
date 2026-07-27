@@ -818,6 +818,27 @@ class AIAssistant:
     ) -> dict[str, Any]:
         self._actor = actor
         ttl = int(self.settings.chat_ttl_seconds or 3600)
+
+        # Hard-route obvious installer/package questions so the model does not
+        # confuse «дистрибутивы» with device_type inventory.
+        routed = await self._route_agent_distribution_query(message)
+        if routed is not None:
+            self.store.append_chat(session_id, "user", message, ttl_seconds=ttl)
+            self.store.append_chat(
+                session_id,
+                "assistant",
+                routed.get("reply") or "Готово.",
+                ttl_seconds=ttl,
+                meta={"actions": [{"tool": a.get("tool"), "ok": (a.get("result") or {}).get("ok")} for a in routed.get("actions", [])]},
+            )
+            return {
+                "reply": routed.get("reply") or "Готово.",
+                "actions": routed.get("actions") or [],
+                "session_id": session_id,
+                "ttl_seconds": ttl,
+                "memory_turns": len(self.store.get_chat(session_id, ttl_seconds=ttl)),
+            }
+
         history = self.store.get_chat(session_id, ttl_seconds=ttl)
         messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
         for item in history:
@@ -931,6 +952,69 @@ class AIAssistant:
             if r.get("error"):
                 return f"Не удалось: {r.get('error')}"
         return "Готово."
+
+    async def _route_agent_distribution_query(self, message: str) -> dict[str, Any] | None:
+        msg = (message or "").strip().lower()
+        if not msg:
+            return None
+
+        package_words = (
+            "дистрибутив", "дистриб", "инсталлятор", "installer", "msi", "deb", "rpm",
+            "скач", "download", "/agents/", "package", "пакет агента", "пакет checkmk",
+        )
+        install_words = ("установ", "install", "one-liner", "одной команд", "команду установки")
+        agent_words = ("агент", "checkmk")
+
+        is_agent_package_query = (
+            any(w in msg for w in package_words)
+            or (any(w in msg for w in install_words) and any(w in msg for w in agent_words))
+        )
+        if not is_agent_package_query:
+            return None
+
+        actions: list[dict[str, Any]] = []
+
+        # Direct install command request
+        if any(w in msg for w in install_words):
+            os_name = "windows" if any(w in msg for w in ("windows", "win", "msi", "powershell")) else "linux"
+            server = ""
+            m = re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3}|[a-z0-9.-]+\.[a-z]{2,})\b", msg)
+            if m:
+                server = m.group(1)
+            result = self._get_agent_install_command({"os": os_name, "server": server})
+            actions.append({"tool": "get_agent_install_command", "args": {"os": os_name, "server": server}, "result": result})
+            cmd = result.get("command") or ""
+            target = "Windows" if os_name == "windows" else "Linux"
+            reply = f"Гера: вот команда установки агента Checkmk для {target}:\n```\n{cmd}\n```"
+            return {"reply": reply, "actions": actions}
+
+        # Direct package URL request
+        for pkg, words in {
+            "msi": ("msi", "windows"),
+            "deb": ("deb", "ubuntu", "debian"),
+            "rpm": ("rpm", "rhel", "alma", "rocky", "centos"),
+            "ctl": ("agent-ctl", "cmk-agent-ctl", "ctl"),
+        }.items():
+            if any(w in msg for w in words):
+                result = self._get_agent_package_url({"package": pkg})
+                actions.append({"tool": "get_agent_package_url", "args": {"package": pkg}, "result": result})
+                reply = f"Гера: вот прямой URL для скачивания:\n`{result.get('url')}`"
+                return {"reply": reply, "actions": actions}
+
+        # Default: list all packages
+        result = self._list_agent_packages()
+        actions.append({"tool": "list_agent_packages", "args": {}, "result": result})
+        lines = [
+            f"Гера: дистрибутивы Checkmk {_CMK_AGENT_VERSION} лежат в AIMon Dashboard и раздаются по `/agents/...`.",
+            "",
+            "Файлы:",
+        ]
+        for pkg in result.get("packages", []):
+            lines.append(f"- `{pkg.get('url_path')}` — {pkg.get('description')}")
+        lines += ["", "Скрипты установки:"]
+        for script in result.get("scripts", []):
+            lines.append(f"- `{script.get('url_path')}` — {script.get('description')}")
+        return {"reply": "\n".join(lines), "actions": actions}
 
     async def _complete(self, client: httpx.AsyncClient, messages: list[dict[str, Any]]) -> dict[str, Any]:
         resp = await client.post(
