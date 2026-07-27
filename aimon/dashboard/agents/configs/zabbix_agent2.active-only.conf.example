@@ -1,9 +1,0 @@
-# Zabbix Agent 2 — только active checks (рабочие станции без входящего 10050)
-
-Hostname=REPLACE_HOSTNAME
-Server=REPLACE_ZABBIX_SERVER
-ServerActive=REPLACE_ZABBIX_SERVER
-ListenPort=10050
-StartAgents=0
-Timeout=10
-# HostMetadata=windows,workstation,netmon

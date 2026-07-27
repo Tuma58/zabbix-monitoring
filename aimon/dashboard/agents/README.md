@@ -1,64 +1,65 @@
-# Дистрибутивы Zabbix Agent (зеркало для NetMon)
+# Дистрибутивы Checkmk Agent (зеркало AIMon)
 
-Локальные пакеты **Zabbix 7.0.28**, лежат в git и отдаются dashboard по URL `/agents/...`.
+Версия: **Checkmk 2.3.0p48 CRE**
 
-## Деплой одной командой
+Файлы хранятся в репозитории и раздаются AIMon Dashboard по URL `/agents/...`.
 
-Подставьте адрес вашего dashboard (обычно `https://PUBLIC_IP:7444`) и имя хоста агента.
+---
 
-> Dashboard отдаёт **самоподписанный** HTTPS — в командах нужен `curl -k` (или HTTP на `:7081`, если доступен).
+## Быстрая установка одной командой
 
-### Linux (Ubuntu 22.04/24.04, Debian 12, RHEL/Alma/Rocky 9)
+### Linux (Ubuntu, Debian, RHEL / Alma / Rocky)
 
 ```bash
-curl -fsSLk "https://HOST:7444/agents/scripts/deploy-agent2-linux.sh" \
-  | sudo bash -s -- --base "https://HOST:7444" --server HOST --hostname my-linux-host
+curl -fsSLk "https://HOST:7444/agents/install-linux.sh" \
+  | sudo bash -s -- --server HOST --token <TOKEN> --hostname auto
 ```
 
-Скрипт: [`scripts/deploy-agent2-linux.sh`](scripts/deploy-agent2-linux.sh)
+или HTTP:
+
+```bash
+curl -fsSL "http://HOST:7081/agents/install-linux.sh" \
+  | sudo bash -s -- --server HOST --token <TOKEN>
+```
 
 ### Windows (PowerShell от администратора)
 
 ```powershell
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-& ([scriptblock]::Create((irm "https://HOST:7444/agents/scripts/deploy-agent2-windows.ps1"))) `
-  -BaseUrl "https://HOST:7444" -ZabbixServer HOST -Hostname win-srv-01
+& ([scriptblock]::Create((irm "https://HOST:7444/agents/install-windows.ps1"))) `
+    -Server HOST -Token <TOKEN> -Hostname auto
 ```
 
-Скрипт: [`scripts/deploy-agent2-windows.ps1`](scripts/deploy-agent2-windows.ps1)
+---
 
-## Windows (ручная установка)
+## Файлы
 
-| Файл | Назначение |
-|------|------------|
-| `windows/zabbix_agent2-7.0.28-windows-amd64-openssl.msi` | **Рекомендуется** — Agent 2 MSI |
-| `windows/zabbix_agent2-7.0.28-windows-amd64-openssl-static.zip` | Portable Agent 2 |
-| `windows/zabbix_agent-7.0.28-windows-amd64-openssl.msi` | Классический Agent 1 |
-| `windows/zabbix_agent-7.0.28-windows-amd64-openssl.zip` | Portable Agent 1 |
-
-Локальный скрипт (MSI рядом): [`scripts/install-agent2-windows.ps1`](scripts/install-agent2-windows.ps1)
-
-## Linux (ручная установка)
+### Linux
 
 | Файл | Назначение |
 |------|------------|
-| `linux/ubuntu/zabbix-release_*.deb` | Подключение репозитория Ubuntu 22.04 |
-| `linux/debian/zabbix-release_*.deb` | Репозиторий Debian 12 |
-| `linux/rhel/zabbix-release-*.rpm` | Репозиторий RHEL 9 / Alma / Rocky |
-| `linux/zabbix_agent-*-linux-*-static.tar.gz` | Статический Agent 1 (без package manager) |
+| `linux/check-mk-agent_2.3.0p48-1_all.deb` | Пакет для Ubuntu / Debian |
+| `linux/check-mk-agent-2.3.0p48-1.noarch.rpm` | Пакет для RHEL / Alma / Rocky |
+| `linux/check_mk_agent.linux` | Shell-агент (без пакетного менеджера) |
+| `linux/cmk-agent-ctl` | Agent Controller (TLS, бинарник) |
+| `linux/cmk-agent-ctl.gz` | Agent Controller (сжатый) |
 
-Скрипты (работают от файлов в дереве репозитория):
+### Windows
 
-- [`scripts/install-agent2-debian-ubuntu.sh`](scripts/install-agent2-debian-ubuntu.sh)
-- [`scripts/install-agent2-rhel.sh`](scripts/install-agent2-rhel.sh)
+| Файл | Назначение |
+|------|------------|
+| `windows/check_mk_agent.msi` | Инсталлятор Windows-агента |
 
-## Конфиги
+### Скрипты
 
-- [`configs/zabbix_agent2.conf.example`](configs/zabbix_agent2.conf.example)
-- [`configs/zabbix_agent2.active-only.conf.example`](configs/zabbix_agent2.active-only.conf.example)
+| Файл | Назначение |
+|------|------------|
+| `install-linux.sh` | Установка + авторегистрация в AIMon (Linux) |
+| `install-windows.ps1` | Установка + авторегистрация в AIMon (Windows) |
+
+---
 
 ## Обновление зеркала
 
-```bash
-sudo ./scripts/fetch-zabbix-assets.sh
-```
+При обновлении Checkmk перезапустите `scripts/fetch-cmk-agents.sh`
+(скрипт копирует пакеты из контейнера Checkmk и коммитит изменения).
