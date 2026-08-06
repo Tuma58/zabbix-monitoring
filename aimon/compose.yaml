@@ -47,7 +47,7 @@ services:
       AIMON_ADMIN_USERNAME: ${AIMON_ADMIN_USERNAME:-admin}
       AIMON_ADMIN_PASSWORD: ${AIMON_ADMIN_PASSWORD:-AdminChangeMe!}
       AUTH_TOKEN_TTL_SECONDS: ${AUTH_TOKEN_TTL_SECONDS:-604800}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.66:7081,https://100.10.10.66:7444,http://94.181.181.43:7081,https://94.181.181.43:7444}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.52:7081,https://100.10.10.52:7444,http://aimon.coresupport.ru,https://aimon.coresupport.ru}
     dns:
       - 8.8.8.8
       - 1.1.1.1
