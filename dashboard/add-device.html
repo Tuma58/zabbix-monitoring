@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FAF8F5">
+  <title>Добавление устройства — CoreSupport Monitor</title>
+  <meta name="description" content="Мастер добавления устройства в мониторинг CoreSupport">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="add-device">
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 6 5-3 8 3 5-3v15l-5 3-8-3-5 3Z"/><path d="M8 3v15M16 6v15"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M14 4v6M4 17h2M10 17h10M10 14v6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M14 21h-4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-router" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="8" rx="2"/><path d="M7 14h.01M11 14h.01M16 14h2M8 10 5 5M16 10l3-5M12 10V3"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-ups" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="8" r="2"/><path d="M10 15h4M12 13v4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6 6.7L4 11m16 2-2 4.3A7 7 0 0 1 5.8 15"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  </svg>
+
+  <div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <a class="brand" href="index.html" aria-label="CoreSupport Monitor">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10"/></svg>
+          </span>
+          <span>CoreSupport<small>Monitor</small></span>
+        </a>
+        <button class="icon-button sidebar-close" id="sidebarClose" aria-label="Закрыть меню"><svg><use href="#i-close"/></svg></button>
+      </div>
+
+      <nav class="side-nav" aria-label="Основная навигация">
+        <p class="nav-caption">Мониторинг</p>
+        <a href="index.html#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
+        <a href="index.html#devices"><svg><use href="#i-server"/></svg><span>Устройства</span><b id="navDeviceCount">0</b></a>
+        <a href="index.html#problems"><svg><use href="#i-alert"/></svg><span>Проблемы</span><i id="navProblemCount">0</i></a>
+        <a href="index.html#sites"><svg><use href="#i-map"/></svg><span>Площадки</span></a>
+        <p class="nav-caption second">Действия</p>
+        <a class="active" href="add-device.html"><svg><use href="#i-plus"/></svg><span>Добавить устройство</span></a>
+        <a href="index.html"><svg><use href="#i-chevron"/></svg><span>Назад к обзору</span></a>
+      </nav>
+
+      <div class="system-card" id="systemStatus">
+        <div class="system-icon"><svg><use href="#i-activity"/></svg></div>
+        <div><strong id="systemStatusTitle">Проверка связи</strong><span id="systemStatusMeta">API · ожидание</span></div>
+        <span class="live-dot" id="systemLiveDot" aria-label="Статус"></span>
+      </div>
+      <div class="sidebar-user">
+        <span class="avatar" id="userAvatar">—</span>
+        <div><strong id="userName">Гость</strong><span id="userRole">нет сессии</span></div>
+        <button class="icon-button" id="reconnectApi" aria-label="Подключить API" title="Подключить API"><svg><use href="#i-refresh"/></svg></button>
+      </div>
+    </aside>
+
+    <button class="sidebar-scrim" id="sidebarScrim" aria-label="Закрыть меню"></button>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menuButton" aria-label="Открыть меню"><svg><use href="#i-menu"/></svg></button>
+        <div class="topbar-title">
+          <p class="eyebrow">Инвентарь</p>
+          <strong>Добавление устройства</strong>
+        </div>
+        <div class="top-actions">
+          <span class="sync-state" id="syncState"><span></span>Ожидание API</span>
+          <a class="button ghost" href="index.html">← К обзору</a>
+        </div>
+      </header>
+
+      <div class="content content-wizard">
+        <section class="page-wizard" id="deviceWizard" aria-labelledby="wizardTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Новое устройство</p><h2 id="wizardTitle">Добавление в мониторинг</h2></div><a class="icon-button modal-close" href="index.html" aria-label="Назад к обзору"><svg><use href="#i-close"/></svg></a></header>
+      <div class="wizard-layout">
+        <aside class="wizard-steps" aria-label="Шаги добавления">
+          <button class="active" data-step-nav="1"><i>1</i><span><b>Основное</b><small>Имя и площадка</small></span></button>
+          <button data-step-nav="2"><i>2</i><span><b>Подключение</b><small>Протокол и профиль</small></span></button>
+          <button data-step-nav="3"><i>3</i><span><b>Проверка</b><small>Доступность и модель</small></span></button>
+          <button data-step-nav="4"><i>4</i><span><b>Готово</b><small>Проверка настроек</small></span></button>
+        </aside>
+        <form id="deviceForm" novalidate>
+          <div class="wizard-content">
+            <section class="wizard-page active" data-step="1">
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-server"/></svg></span><div><h3>Расскажите об устройстве</h3><p>Достаточно имени и адреса — остальные параметры предложим автоматически.</p></div></div>
+              <div class="form-grid two">
+                <label class="field"><span>Понятное имя <b>*</b></span><input name="name" id="deviceName" placeholder="Например, Коммутатор серверной" required><small>Будет видно операторам на dashboard</small></label>
+                <label class="field"><span>IP-адрес или FQDN <b>*</b></span><input name="address" id="deviceAddress" placeholder="10.20.1.15" required inputmode="url"><small>Адрес в management-сети</small></label>
+                <label class="field"><span>Площадка <b>*</b></span><select name="site" id="deviceSite" required><option value="">Выберите или создайте площадку</option></select></label>
+                <label class="field"><span>Тип устройства <b>*</b></span><select name="type" id="deviceType" required><option value="">Определить автоматически</option><option value="server">Сервер</option><option value="router">Сетевое оборудование</option><option value="computer">Рабочая станция</option><option value="ups">ИБП</option></select></label>
+              </div>
+              <div class="inline-note"><svg><use href="#i-shield"/></svg><div><strong>Безопасная проверка</strong><span>Система проверит только указанный адрес с назначенного Zabbix proxy.</span></div></div>
+            </section>
+
+            <section class="wizard-page" data-step="2">
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-sliders"/></svg></span><div><h3>Как подключаться?</h3><p>Выберите протокол и следуйте инструкции для вашего типа устройства.</p></div></div>
+              <fieldset class="protocols"><legend class="sr-only">Протокол подключения</legend>
+                <label><input type="radio" name="protocol" value="SNMPv3" checked><span class="protocol-card"><i><svg><use href="#i-router"/></svg></i><b>SNMPv3</b><small>Рекомендуется для сети и ИБП</small><em>Безопасно</em></span></label>
+                <label><input type="radio" name="protocol" value="Zabbix agent2"><span class="protocol-card"><i><svg><use href="#i-monitor"/></svg></i><b>Zabbix agent2</b><small>Linux и Windows</small></span></label>
+                <label><input type="radio" name="protocol" value="ICMP"><span class="protocol-card"><i><svg><use href="#i-activity"/></svg></i><b>Только ICMP</b><small>Базовая доступность</small></span></label>
+              </fieldset>
+              <label class="field guide-subtype-field" id="guideSubtypeField" hidden>
+                <span id="guideSubtypeLabel">Уточните тип / производителя</span>
+                <select id="guideSubtype" aria-describedby="guideSubtypeHint"></select>
+                <small id="guideSubtypeHint">Инструкция ниже обновится после выбора</small>
+              </label>
+              <div class="connection-guide-panel" id="connectionGuidePanel" aria-live="polite">
+                <div class="guide-frame" id="connectionGuideContent">
+                  <header class="guide-frame-head">
+                    <span class="guide-badge">—</span>
+                    <h4>Инструкция по подключению</h4>
+                    <p class="guide-template">Выберите тип устройства на шаге 1</p>
+                  </header>
+                  <div class="guide-frame-body"><p>После выбора типа и протокола здесь появится пошаговая инструкция со ссылками на агенты и документацию.</p></div>
+                </div>
+              </div>
+              <div class="form-grid two connection-fields">
+                <label class="field"><span>Профиль подключения</span><select id="credentialProfile"><option value="">Будет создан автоматически</option></select><small>Подбирается по типу устройства и протоколу</small></label>
+                <label class="field"><span>Zabbix proxy</span><select id="proxy"><option value="">По умолчанию (сервер)</option></select><small>Оставьте пустым для прямого подключения к Zabbix server</small></label>
+              </div>
+              <button type="button" class="text-button add-profile" id="refreshCredentialProfile"><svg><use href="#i-refresh"/></svg>Обновить профиль для выбранного типа</button>
+            </section>
+
+            <section class="wizard-page" data-step="3">
+              <div class="step-heading"><span class="step-icon"><svg><use href="#i-activity"/></svg></span><div><h3>Проверяем подключение</h3><p>Это займёт несколько секунд. Устройство пока не добавляется в Zabbix.</p></div></div>
+              <div class="probe-card" id="probeCard">
+                <div class="probe-animation"><span></span><span></span><span></span><i><svg><use href="#i-router"/></svg></i></div>
+                <div class="probe-title"><strong id="probeTitle">Готовы начать проверку</strong><span id="probeSubtitle">Проверим сеть, протокол, авторизацию и определим модель</span></div>
+                <button type="button" class="button secondary" id="runProbe"><svg><use href="#i-refresh"/></svg>Проверить подключение</button>
+              </div>
+              <p class="probe-error" id="probeError" hidden></p>
+              <div class="check-list" id="checkList">
+                <div data-check="network"><i><svg><use href="#i-clock"/></svg></i><span><b>Сеть и ICMP</b><small>Ожидает проверки</small></span><em>—</em></div>
+                <div data-check="protocol"><i><svg><use href="#i-clock"/></svg></i><span><b>Протокол и порт</b><small>Ожидает проверки</small></span><em>—</em></div>
+                <div data-check="auth"><i><svg><use href="#i-clock"/></svg></i><span><b>Авторизация</b><small>Ожидает проверки</small></span><em>—</em></div>
+                <div data-check="identity"><i><svg><use href="#i-clock"/></svg></i><span><b>Определение устройства</b><small>Ожидает проверки</small></span><em>—</em></div>
+              </div>
+            </section>
+
+            <section class="wizard-page" data-step="4">
+              <div class="step-heading"><span class="step-icon success"><svg><use href="#i-check"/></svg></span><div><h3>Всё готово к добавлению</h3><p>Мы подобрали настройки. Проверьте их перед применением.</p></div></div>
+              <div class="preview-device">
+                <span class="preview-icon"><svg><use href="#i-router"/></svg></span>
+                <div><p>Устройство</p><h4 id="previewName">Новое устройство</h4><span id="previewAddress">—</span></div>
+                <span class="preview-status"><i></i>Подключение проверено</span>
+              </div>
+              <dl class="preview-list">
+                <div><dt>Площадка</dt><dd id="previewSite">—</dd></div>
+                <div><dt>Способ подключения</dt><dd id="previewProtocol">SNMPv3</dd></div>
+                <div><dt>Найдена модель</dt><dd id="previewModel">—</dd></div>
+                <div><dt>Zabbix proxy</dt><dd id="previewProxy">Сервер по умолчанию</dd></div>
+                <div><dt>Шаблон мониторинга</dt><dd><span class="template-chip" id="previewTemplate">Будет выбран автоматически</span></dd></div>
+                <div><dt>Будем контролировать</dt><dd id="previewMetrics">Доступность и базовые метрики ОС</dd></div>
+              </dl>
+              <label class="confirm-check"><input type="checkbox" id="startMonitoring" checked><span><svg><use href="#i-check"/></svg></span><span><b>Сразу начать мониторинг</b><small>Первые данные появятся в течение 2–5 минут</small></span></label>
+            </section>
+          </div>
+          <footer class="wizard-footer"><span class="step-counter">Шаг <b id="currentStepLabel">1</b> из 4</span><div><a class="button ghost" href="index.html" id="wizardCancel">Отмена</a><button type="button" class="button ghost" id="wizardBack" hidden>Назад</button><button type="button" class="button primary" id="wizardNext">Продолжить<svg><use href="#i-chevron"/></svg></button></div></footer>
+        </form>
+      </div>
+    </div>
+  </section>
+        <footer class="app-footer"><span>CoreSupport Monitor</span><span id="footerStatus">Подключение к /api/v1…</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <dialog class="modal settings-modal" id="loginDialog" aria-labelledby="loginTitle">
+    <div class="modal-shell">
+      <header class="modal-head"><div><p class="eyebrow">Авторизация</p><h2 id="loginTitle">Вход в CoreSupport Monitor</h2><p id="loginMessage">Введите пароль администратора портала</p></div><button class="icon-button modal-close" data-close="loginDialog" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button></header>
+      <form id="loginForm" class="settings-grid" style="grid-template-columns:1fr;padding-top:8px">
+        <label class="field"><span>Email</span><input id="loginEmail" type="email" autocomplete="username" value="admin@example.com" required></label>
+        <label class="field"><span>Пароль</span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      </form>
+      <footer class="settings-footer"><span><svg><use href="#i-shield"/></svg>Сессия сохраняется в браузере</span><button class="button primary" type="submit" form="loginForm">Войти</button></footer>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"><span><svg><use href="#i-check"/></svg></span><p></p></div>
+
+  <script src="connection-guides.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -16,6 +16,7 @@ cd /opt/netmon
 sudo docker compose logs --since=1h zabbix-server
 sudo docker compose logs --since=1h zabbix-web
 sudo docker compose logs --since=1h postgres
+sudo docker compose logs --since=1h api
 ```
 
 В custom backend JSON-логи должны содержать `timestamp`, `level`, `service`,
@@ -24,7 +25,7 @@ PSK, session cookie, authorization header и полный encrypted payload за
 
 ## Backup
 
-Минимальный логический backup Zabbix БД:
+Минимальный логический backup Zabbix и portal БД:
 
 ```bash
 cd /opt/netmon
@@ -32,13 +33,15 @@ set -a
 . ./.env
 set +a
 sudo docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc > "zabbix-$(date -u +%Y%m%dT%H%M%SZ).dump"
+sudo docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "${PORTAL_DB:-netmon}" -Fc > "netmon-$(date -u +%Y%m%dT%H%M%SZ).dump"
 ```
 
-Файл необходимо шифровать и копировать за пределы VPS. Production-процесс
+Файлы необходимо шифровать и копировать за пределы VPS. Production-процесс
 должен запускаться по timer/backup-сервису, иметь retention (например 7 daily,
 4 weekly, 12 monthly) и отдельный alert при ошибке. `.env`, Caddy config,
 экспортированные Zabbix templates и конфигурация custom portal копируются
-отдельно; `.env` хранится только в зашифрованном backup.
+отдельно; `.env` хранится только в зашифрованном backup. БД портала (`netmon`)
+содержит пользователей, audit и credential profiles — её backup обязателен.
 
 ## Restore drill
 

@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF8F5">
+  <title>AIMon — AI-мониторинг</title>
+  <meta name="description" content="AIMon — мониторинг инфраструктуры на базе Checkmk с AI-ассистентом">
+  <link rel="stylesheet" href="styles.css?v=gera10">
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></symbol>
+    <symbol id="i-radar" viewBox="0 0 24 24"><path d="M12 12 19 5"/><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 8a4 4 0 1 0 4 4"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M17 5l2 2M15 7l2 2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7-7-1Z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6 6.7L4 11m16 2-2 4.3A7 7 0 0 1 5.8 15"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+    <symbol id="i-net" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="8" rx="2"/><path d="M7 14h.01M11 14h.01M16 14h2M12 10V4M8 4h8"/></symbol>
+    <symbol id="i-site" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M4 20h16"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m14 6 4 4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M16 12H8M16 12l-3-3M16 12l-3 3"/></symbol>
+  </svg>
+
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <!-- Login -->
+  <div class="login-gate" id="loginGate" hidden>
+    <form class="login-card" id="loginForm">
+      <div class="login-brand">
+        <span class="brand-mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10.2"/></svg></span>
+        <div>
+          <strong>AIMon</strong>
+          <small>Вход в панель мониторинга</small>
+        </div>
+      </div>
+      <label class="field"><span>Логин</span><input id="loginUser" name="username" autocomplete="username" required autofocus></label>
+      <label class="field"><span>Пароль</span><input id="loginPass" name="password" type="password" autocomplete="current-password" required></label>
+      <p class="login-error" id="loginError" hidden></p>
+      <button class="btn primary wide" type="submit" id="loginSubmit">Войти</button>
+    </form>
+  </div>
+
+  <div class="shell" id="appShell" hidden>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" fill="currentColor"/><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="10.2"/></svg></span>
+        <span class="brand-name">AIMon<small>CoreSupport</small></span>
+        <button class="icon-btn only-mobile" id="navClose" aria-label="Закрыть меню"><svg><use href="#i-close"/></svg></button>
+      </div>
+
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="nav-item active" data-view="overview" data-cap="hosts_read" href="#overview"><svg><use href="#i-grid"/></svg><span>Обзор</span></a>
+        <a class="nav-item" data-view="sites" data-cap="hosts_read" href="#sites"><svg><use href="#i-site"/></svg><span>Площадки</span><b id="navSites">0</b></a>
+        <a class="nav-item" data-view="hosts" data-cap="hosts_read" href="#hosts"><svg><use href="#i-server"/></svg><span>Узлы</span><b id="navHosts">0</b></a>
+        <a class="nav-item" data-view="scan" data-cap="scan" href="#scan"><svg><use href="#i-radar"/></svg><span>Скан сети</span></a>
+        <a class="nav-item" data-view="secrets" data-cap="secrets" href="#secrets"><svg><use href="#i-key"/></svg><span>Секреты</span></a>
+        <a class="nav-item" data-view="assistant" data-cap="ai" href="#assistant"><svg><use href="#i-spark"/></svg><span>Гера</span></a>
+        <a class="nav-item" data-view="settings" data-cap="settings" href="#settings"><svg><use href="#i-cog"/></svg><span>Настройки</span></a>
+      </nav>
+
+      <div class="side-status">
+        <span class="dot" id="engineDot"></span>
+        <div>
+          <strong id="engineName">Checkmk</strong>
+          <small id="engineMeta">проверка связи…</small>
+        </div>
+      </div>
+    </aside>
+    <button class="scrim" id="scrim" aria-label="Закрыть меню"></button>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="navOpen" aria-label="Меню"><svg><use href="#i-menu"/></svg></button>
+        <div class="search">
+          <svg><use href="#i-server"/></svg>
+          <input id="search" type="search" placeholder="Поиск узла, IP или сервиса" autocomplete="off">
+        </div>
+        <div class="topbar-actions">
+          <span class="sync" id="sync"><span class="dot"></span>Ожидание API</span>
+          <button class="btn primary need-write" id="quickAdd"><svg><use href="#i-plus"/></svg><span class="hide-xs">Добавить узел</span></button>
+          <div class="user-chip" id="userChip">
+            <svg><use href="#i-user"/></svg>
+            <div>
+              <strong id="userName">—</strong>
+              <small id="userRole">—</small>
+            </div>
+            <button class="btn ghost" type="button" id="logoutBtn" title="Выйти"><svg><use href="#i-logout"/></svg></button>
+          </div>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- Overview -->
+        <section class="view active" data-view="overview">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Инфраструктура · 24/7</p>
+              <h1>Обзор мониторинга</h1>
+              <p class="lead" id="overviewLead">Загрузка данных из Checkmk…</p>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <article class="metric">
+              <span class="metric-ic indigo"><svg><use href="#i-server"/></svg></span>
+              <div class="metric-val" id="mHosts">0</div>
+              <div class="metric-label">Узлов на мониторинге</div>
+              <div class="metric-note ok" id="mHostsNote"><svg><use href="#i-check"/></svg>нет узлов</div>
+            </article>
+            <article class="metric">
+              <span class="metric-ic green"><svg><use href="#i-check"/></svg></span>
+              <div class="metric-val" id="mUp">0<span>%</span></div>
+              <div class="metric-label">Доступность</div>
+              <div class="metric-note" id="mUpNote">—</div>
+            </article>
+            <article class="metric">
+              <span class="metric-ic terra"><svg><use href="#i-alert"/></svg></span>
+              <div class="metric-val" id="mProblems">0</div>
+              <div class="metric-label">Активные проблемы</div>
+              <div class="metric-note" id="mProblemsNote">проблем нет</div>
+            </article>
+            <article class="metric">
+              <span class="metric-ic blue"><svg><use href="#i-cpu"/></svg></span>
+              <div class="metric-val" id="mServices">0</div>
+              <div class="metric-label">Сервисов</div>
+              <div class="metric-note" id="mServicesNote">discovery</div>
+            </article>
+          </div>
+
+          <div class="grid-2">
+            <section class="card">
+              <div class="card-head"><h2>Состояние узлов</h2><button class="btn ghost" id="refreshHosts"><svg><use href="#i-refresh"/></svg>Обновить</button></div>
+              <div class="host-mini" id="hostMini">
+                <div class="empty">Пока нет узлов. Установите агент одной командой или просканируйте сеть.</div>
+              </div>
+            </section>
+
+            <section class="ai-card" data-cap="ai">
+              <div
+                class="gera-overview"
+                data-goto="assistant"
+                role="button"
+                tabindex="0"
+                aria-label="Открыть AI ассистента"
+                title="AI ассистент"
+              >
+                <picture class="gera-overview-bg">
+                  <source srcset="assets/gera-overview.webp" type="image/webp">
+                  <img
+                    class="gera-overview-img"
+                    src="assets/gera-overview.png"
+                    alt="Гера — AI ассистент"
+                    width="900"
+                    height="900"
+                    loading="lazy"
+                    decoding="async"
+                  >
+                </picture>
+                <!-- hidden media for idle/thinking state sync -->
+                <div class="gera mini visually-hidden" data-state="idle" id="geraMini" aria-hidden="true">
+                  <div class="gera-face">
+                    <video class="gera-vid idle" poster="assets/gera-bot-still.jpg" muted loop playsinline autoplay preload="metadata">
+                      <source src="assets/gera-bot-idle.webm" type="video/webm">
+                      <source src="assets/gera-bot-idle.mp4" type="video/mp4">
+                    </video>
+                    <video class="gera-vid think" poster="assets/gera-bot-still.jpg" muted loop playsinline preload="metadata">
+                      <source src="assets/gera-bot-idle.webm" type="video/webm">
+                      <source src="assets/gera-bot-idle.mp4" type="video/mp4">
+                    </video>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- Sites / площадки -->
+        <section class="view" data-view="sites">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">Структура</p>
+              <h1>Площадки мониторинга</h1>
+              <p class="lead">Группировка узлов по площадкам (папки Checkmk): офис, ЦОД, филиал.</p>
+            </div>
+            <button class="btn primary need-sites" id="addSite"><svg><use href="#i-plus"/></svg>Новая площадка</button>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table class="tbl" id="siteTable">
+                <thead><tr><th>Площадка</th><th>Путь</th><th>Узлов</th><th></th></tr></thead>
+                <tbody id="siteRows"><tr><td colspan="4" class="empty">Площадок пока нет.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Hosts -->
+        <section class="view" data-view="hosts">
+          <div class="page-head">
+            <div><p class="eyebrow">Каталог</p><h1>Узлы мониторинга</h1><p class="lead">Все хосты Checkmk: агенты и SNMP-устройства.</p></div>
+            <button class="btn primary need-write" id="addHost"><svg><use href="#i-plus"/></svg>Добавить узел</button>
+          </div>
+          <div class="card">
+            <div class="bulk-bar need-write" id="hostBulkBar" hidden>
+              <span id="hostBulkCount">Выбрано: 0</span>
+              <label class="field inline">
+                <span>Перенести на</span>
+                <select id="bulkMoveSite"></select>
+              </label>
+              <button class="btn primary" id="bulkMoveHosts" type="button" disabled>Перенести</button>
+            </div>
+            <div class="table-wrap">
+              <table class="tbl" id="hostTable">
+                <thead>
+                  <tr>
+                    <th class="need-write"><input type="checkbox" id="hostAll" title="Выбрать все"></th>
+                    <th><button type="button" class="th-sort" data-sort="name">Узел<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="address">Адрес<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="site">Площадка<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="device_type">Тип устройства<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="type">Мониторинг<span class="sort-ind"></span></button></th>
+                    <th><button type="button" class="th-sort" data-sort="state">Состояние<span class="sort-ind"></span></button></th>
+                    <th class="need-write"></th>
+                  </tr>
+                  <tr class="filter-row">
+                    <th class="need-write"></th>
+                    <th><input type="search" id="fHostName" placeholder="фильтр…" autocomplete="off"></th>
+                    <th><input type="search" id="fHostAddr" placeholder="IP…" autocomplete="off"></th>
+                    <th>
+                      <select id="fHostSite">
+                        <option value="">Все</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select id="fHostDevice">
+                        <option value="">Все</option>
+                        <option value="router">Роутер</option>
+                        <option value="switch">Коммутатор</option>
+                        <option value="ap">Точка доступа</option>
+                        <option value="printer">Принтер</option>
+                        <option value="server">Сервер</option>
+                        <option value="ups">ИБП</option>
+                        <option value="firewall">Файрвол</option>
+                        <option value="camera">Камера</option>
+                        <option value="nas">NAS</option>
+                        <option value="network">Сеть</option>
+                        <option value="host">Хост</option>
+                        <option value="unknown">Не определено</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select id="fHostType">
+                        <option value="">Все</option>
+                        <option value="agent">Агент</option>
+                        <option value="snmp">SNMP</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select id="fHostState">
+                        <option value="">Все</option>
+                        <option value="up">Доступен</option>
+                        <option value="down">Недоступен</option>
+                        <option value="warn">Предупреждение</option>
+                      </select>
+                    </th>
+                    <th class="need-write"></th>
+                  </tr>
+                </thead>
+                <tbody id="hostRows"><tr><td colspan="8" class="empty">Узлов пока нет.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scan -->
+        <section class="view" data-view="scan">
+          <div class="page-head"><div><p class="eyebrow">Обнаружение</p><h1>Скан сети (SNMP)</h1><p class="lead">Найдите SNMP-устройства в сегменте и добавьте в мониторинг.</p></div></div>
+          <div class="card">
+            <div class="form-row">
+              <label class="field">
+                <span>Подсеть (CIDR)</span>
+                <input id="scanCidr" placeholder="10.0.0.0/24" value="">
+              </label>
+              <label class="field">
+                <span>SNMP-профиль</span>
+                <select id="scanProfile"><option value="">Выберите профиль</option></select>
+              </label>
+              <label class="field">
+                <span>Площадка для добавления</span>
+                <select id="scanSite"></select>
+              </label>
+              <button class="btn primary" id="runScan"><svg><use href="#i-radar"/></svg>Сканировать</button>
+            </div>
+            <div class="scan-status" id="scanStatus" hidden></div>
+            <div class="table-wrap">
+              <table class="tbl" id="scanTable">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="scanAll"></th>
+                    <th>IP</th>
+                    <th>Имя</th>
+                    <th>Псевдоним</th>
+                    <th>Тип</th>
+                    <th>Вендор</th>
+                    <th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody id="scanRows"><tr><td colspan="7" class="empty">Запустите скан, чтобы увидеть найденные устройства.</td></tr></tbody>
+              </table>
+            </div>
+            <div class="scan-actions">
+              <button class="btn primary" id="addSelected" disabled><svg><use href="#i-plus"/></svg>Добавить выбранные на площадку</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Secrets -->
+        <section class="view" data-view="secrets">
+          <div class="page-head"><div><p class="eyebrow">Безопасность</p><h1>Секреты</h1><p class="lead">Токены агентов и SNMP-профили. Значения не показываются после сохранения.</p></div>
+            <button class="btn primary" id="addSecret"><svg><use href="#i-plus"/></svg>Новый секрет</button></div>
+          <div class="card">
+            <div class="secret-list" id="secretList">
+              <div class="empty">Секретов пока нет.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Assistant -->
+        <section class="view" data-view="assistant">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">AI-ассистент</p>
+              <h1>Гера</h1>
+              <p class="lead">Киберноид AIMon. Память диалога — 1 час. Управляет узлами, площадками, пользователями (кроме админов), секретами и кастомными инструментами.</p>
+            </div>
+            <button class="btn ghost" type="button" id="clearChat" title="Очистить память диалога">Очистить память</button>
+          </div>
+          <div class="assistant">
+            <div class="gera hero" data-state="idle" id="geraHero">
+              <div class="gera-rings"><span></span><span></span><span></span></div>
+              <div class="gera-scan" aria-hidden="true"></div>
+              <div class="gera-face">
+                <video class="gera-vid idle" poster="assets/gera-bot-still.jpg" muted loop playsinline autoplay preload="auto" aria-label="Гера">
+                  <source src="assets/gera-bot-idle.webm" type="video/webm">
+                  <source src="assets/gera-bot-idle.mp4" type="video/mp4">
+                </video>
+                <video class="gera-vid think" poster="assets/gera-bot-still.jpg" muted loop playsinline preload="auto">
+                  <source src="assets/gera-bot-idle.webm" type="video/webm">
+                  <source src="assets/gera-bot-idle.mp4" type="video/mp4">
+                </video>
+              </div>
+              <div class="gera-meta">
+                <b>Гера</b>
+                <span class="gera-status" id="geraStatus">Жду команду</span>
+              </div>
+            </div>
+            <div class="chat" id="chat">
+              <div class="msg bot">
+                <img class="msg-ava" src="assets/gera-bot-still.jpg" alt="">
+                <div class="bubble">Здравствуйте! Я Гера. Могу добавить узлы, проверить ping/порт/SNMP, разобрать конфиги. Например: «проверь 10.0.0.1», «покажи типы устройств», «добавь сервер 10.0.0.5».</div>
+              </div>
+            </div>
+            <form class="chat-bar" id="chatForm">
+              <input id="chatInput" placeholder="Команда для Геры…" autocomplete="off">
+              <button class="btn primary icon" type="submit" aria-label="Отправить"><svg><use href="#i-send"/></svg></button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="view" data-view="settings">
+          <div class="page-head"><div><p class="eyebrow">Система</p><h1>Настройки</h1><p class="lead">Подключение к Checkmk, пользователи и роли.</p></div></div>
+
+          <div class="card" id="usersCard" hidden>
+            <div class="card-head">
+              <h2>Пользователи</h2>
+              <button class="btn primary" type="button" id="addUser"><svg><use href="#i-plus"/></svg>Добавить</button>
+            </div>
+            <p class="lead" style="margin:0 0 14px">Администратор — полный доступ. Инженер — узлы и площадки. Пользователь — только назначенные узлы.</p>
+            <div class="table-wrap">
+              <table class="tbl" id="userTable">
+                <thead><tr><th>Пользователь</th><th>Роль</th><th>Узлы</th><th>Статус</th><th></th></tr></thead>
+                <tbody id="userRows"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Система</h2></div>
+            <dl class="kv">
+              <div><dt>Движок сбора</dt><dd>Checkmk Raw</dd></div>
+              <div><dt>Backend API</dt><dd id="setApi">/api/v1</dd></div>
+              <div><dt>Статус Checkmk</dt><dd id="setEngine">проверка…</dd></div>
+              <div><dt>Текущий пользователь</dt><dd id="setUser">—</dd></div>
+            </dl>
+            <div class="cmd">
+              <p>Установка агента (одна команда):</p>
+              <pre id="agentCmd">curl -fsSLk "https://HOST/agents/install-linux.sh" | sudo bash -s -- --server HOST --token &lt;TOKEN&gt; --hostname auto</pre>
+            </div>
+          </div>
+        </section>
+
+        <footer class="foot"><span>AIMon · CoreSupport</span><span id="footStatus">Подключение к API…</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <!-- Floating AI launcher -->
+  <button class="ai-fab" id="aiFab" aria-label="Открыть Геру">
+    <video class="ai-fab-face" id="aiFabFace" autoplay muted loop playsinline poster="assets/gera-bot-still.jpg" aria-hidden="true">
+      <source src="assets/gera-bot-idle.webm" type="video/webm">
+      <source src="assets/gera-bot-idle.mp4" type="video/mp4">
+    </video>
+    <span class="fab-ring"></span>
+  </button>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"><svg><use href="#i-check"/></svg><p></p></div>
+
+  <!-- Host modal -->
+  <dialog class="modal" id="hostModal">
+    <form method="dialog" id="hostForm" class="modal-panel">
+      <header class="modal-head">
+        <h2 id="hostModalTitle">Узел</h2>
+        <button type="button" class="icon-btn" id="hostModalClose" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="modal-body">
+        <input type="hidden" id="hostEditName" value="">
+        <label class="field"><span>Имя (hostname)</span><input id="hostName" required placeholder="web-01" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" title="Латиница, цифры, . _ -"></label>
+        <label class="field"><span>IP / FQDN</span><input id="hostAddress" placeholder="10.0.0.10" autocomplete="off"></label>
+        <label class="field"><span>Псевдоним</span><input id="hostAlias" placeholder="необязательно" autocomplete="off"></label>
+        <label class="field"><span>Мониторинг</span>
+          <select id="hostType"><option value="agent">Агент</option><option value="snmp">SNMP</option></select>
+        </label>
+        <label class="field"><span>Тип устройства</span>
+          <select id="hostDeviceType">
+            <option value="">Не задан</option>
+            <option value="router">Роутер</option>
+            <option value="switch">Коммутатор</option>
+            <option value="ap">Точка доступа</option>
+            <option value="firewall">Файрвол</option>
+            <option value="printer">Принтер</option>
+            <option value="server">Сервер</option>
+            <option value="ups">ИБП</option>
+            <option value="camera">Камера</option>
+            <option value="nas">NAS</option>
+            <option value="network">Сеть</option>
+            <option value="host">Хост</option>
+          </select>
+        </label>
+        <label class="field"><span>Площадка</span><select id="hostSite"></select></label>
+        <label class="field" id="hostSnmpWrap" hidden><span>SNMP-профиль</span><select id="hostSnmpProfile"></select></label>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" id="hostModalCancel">Отмена</button>
+        <button type="submit" class="btn primary" id="hostModalSave">Сохранить</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Site modal -->
+  <dialog class="modal" id="siteModal">
+    <form method="dialog" id="siteForm" class="modal-panel">
+      <header class="modal-head">
+        <h2 id="siteModalTitle">Площадка</h2>
+        <button type="button" class="icon-btn" id="siteModalClose" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="modal-body">
+        <input type="hidden" id="siteEditId" value="">
+        <label class="field"><span>Код (латиница)</span><input id="siteName" required placeholder="office" pattern="[A-Za-z0-9_-]+" autocomplete="off"></label>
+        <label class="field"><span>Название</span><input id="siteTitle" placeholder="Офис Москва" autocomplete="off"></label>
+        <label class="field" id="siteParentWrap"><span>Родитель</span><select id="siteParent"></select></label>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" id="siteModalCancel">Отмена</button>
+        <button type="submit" class="btn primary" id="siteModalSave">Сохранить</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- User modal -->
+  <dialog class="modal" id="userModal">
+    <form method="dialog" id="userForm" class="modal-panel">
+      <header class="modal-head">
+        <h2 id="userModalTitle">Пользователь</h2>
+        <button type="button" class="icon-btn" id="userModalClose" aria-label="Закрыть"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="modal-body">
+        <input type="hidden" id="userEditId" value="">
+        <label class="field"><span>Логин</span><input id="userUsername" required autocomplete="off" pattern="[A-Za-z0-9_.-]{2,40}"></label>
+        <label class="field"><span>Отображаемое имя</span><input id="userDisplayName" autocomplete="off"></label>
+        <label class="field"><span>Роль</span>
+          <select id="userRoleSelect">
+            <option value="user">Пользователь</option>
+            <option value="engineer">Инженер</option>
+            <option value="admin">Администратор</option>
+          </select>
+        </label>
+        <label class="field"><span>Пароль</span><input id="userPassword" type="password" autocomplete="new-password" placeholder="минимум 6 символов"></label>
+        <label class="field check"><input type="checkbox" id="userEnabled" checked><span>Учётная запись активна</span></label>
+        <div class="field" id="userHostsWrap">
+          <span>Доступные узлы (для роли «Пользователь»)</span>
+          <div class="host-checks" id="userHosts"></div>
+        </div>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="btn ghost" id="userModalCancel">Отмена</button>
+        <button type="submit" class="btn primary" id="userModalSave">Сохранить</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=gera10"></script>
+</body>
+</html>

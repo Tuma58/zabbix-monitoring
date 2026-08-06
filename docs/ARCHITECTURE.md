@@ -39,7 +39,7 @@ Prometheus/OpenTelemetry остаются подходящими для само
 | Custom API | Python 3.12 + FastAPI | строгий OpenAPI-контракт и удобные async-интеграции |
 | Фоновые задачи | Celery + Redis | discovery, массовое добавление, синхронизация и retry |
 | Метаданные портала | PostgreSQL 16 | транзакции, JSONB, аудит; отдельная БД/схема от Zabbix |
-| Frontend | React + TypeScript | кастомный dashboard и пошаговый мастер настройки |
+| Frontend | React + TypeScript (целевой); vanilla HTML/JS прототип в `dashboard/` | кастомный dashboard и пошаговый мастер настройки |
 | Edge/TLS | Caddy | автоматический TLS и reverse proxy |
 | Доставка | Docker Compose | воспроизводимая установка на одном VPS |
 | Наблюдаемость | OpenTelemetry + Prometheus endpoint | метрики, трассировки и логи самого портала |

@@ -1,0 +1,113 @@
+name: aimon
+
+# AIMon: Checkmk Raw + API + Dashboard + Edge (те же порты, что у NetMon).
+#
+# HTTP:  7080 Checkmk · 7081 Dashboard · 7000 API
+# HTTPS: 7443 Checkmk · 7444 Dashboard · 7445 API
+# Agent: 10051 → Checkmk agent receiver (6557)
+
+services:
+  checkmk:
+    image: checkmk/check-mk-raw:2.3.0-latest
+    restart: unless-stopped
+    hostname: checkmk
+    environment:
+      CMK_SITE_ID: ${CHECKMK_SITE:-cmk}
+      CMK_PASSWORD: ${CHECKMK_ADMIN_PASSWORD:?CHECKMK_ADMIN_PASSWORD is required}
+    ports:
+      - "${AGENT_BIND:-0.0.0.0}:${AGENT_PORT:-10051}:6557"
+    volumes:
+      - checkmk-data:/omd/sites
+    tmpfs:
+      - /opt/omd/sites/cmk/tmp:uid=1000,gid=1000
+    cap_add:
+      - SYS_ADMIN
+    expose:
+      - "5000"
+    networks:
+      - aimon
+
+  api:
+    build: ./api
+    image: aimon-api:local
+    restart: unless-stopped
+    environment:
+      CHECKMK_URL: http://checkmk:5000/${CHECKMK_SITE:-cmk}/check_mk/api/1.0
+      CHECKMK_SITE: ${CHECKMK_SITE:-cmk}
+      CHECKMK_USER: ${CHECKMK_AUTOMATION_USER:-automation}
+      CHECKMK_SECRET: ${CHECKMK_AUTOMATION_SECRET:-}
+      SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:?SECRETS_MASTER_KEY is required}
+      SCAN_ALLOWLIST: ${SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      DATA_DIR: /data
+      CONFIG_ROOT: /data/configs
+      CHAT_TTL_SECONDS: ${CHAT_TTL_SECONDS:-3600}
+      AIMON_ADMIN_USERNAME: ${AIMON_ADMIN_USERNAME:-admin}
+      AIMON_ADMIN_PASSWORD: ${AIMON_ADMIN_PASSWORD:-AdminChangeMe!}
+      AUTH_TOKEN_TTL_SECONDS: ${AUTH_TOKEN_TTL_SECONDS:-604800}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:7081,https://127.0.0.1:7444,http://100.10.10.52:7081,https://100.10.10.52:7444,http://aimon.coresupport.ru,https://aimon.coresupport.ru}
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    extra_hosts:
+      # CloudFront IP for api.deepseek.com (fallback when Docker DNS flakes)
+      - "api.deepseek.com:3.173.21.63"
+    volumes:
+      - api-data:/data
+      # Конфиги для анализа/правки ассистентом (те же файлы, что у edge/dashboard)
+      - ./edge/nginx.conf:/data/configs/edge-nginx.conf
+      - ./nginx.conf:/data/configs/dashboard-nginx.conf
+      - ./compose.yaml:/data/configs/compose.yaml:ro
+      - ./configs:/data/configs/custom
+    depends_on:
+      - checkmk
+    expose:
+      - "8000"
+    networks:
+      - aimon
+
+  dashboard:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    volumes:
+      # agents/ лежит внутри dashboard/ (вложенный bind-mount на :ro FS nginx ломается)
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    expose:
+      - "80"
+    networks:
+      - aimon
+
+  edge:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${HTTPS_BIND:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+      - "${CHECKMK_WEB_BIND:-0.0.0.0}:${CHECKMK_WEB_PORT:-7080}:7080"
+      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-7081}:7081"
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-7000}:7000"
+      - "${TLS_BIND:-0.0.0.0}:${CHECKMK_TLS_PORT:-7443}:7443"
+      - "${TLS_BIND:-0.0.0.0}:${DASHBOARD_TLS_PORT:-7444}:7444"
+      - "${TLS_BIND:-0.0.0.0}:${API_TLS_PORT:-7445}:7445"
+    volumes:
+      - ./edge/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - checkmk
+      - dashboard
+      - api
+    networks:
+      - aimon
+
+volumes:
+  checkmk-data:
+  api-data:
+
+networks:
+  aimon:
+    driver: bridge
