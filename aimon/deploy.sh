@@ -257,6 +257,19 @@ for i in $(seq 1 36); do
 done
 
 PUBLIC_IP="$(curl -fsS --max-time 3 https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
+
+# 7) Let's Encrypt (если домен смотрит на этот хост и :80 снаружи открыт)
+LE_FLAG="${AIMON_LETSENCRYPT:-1}"
+if [[ "$LE_FLAG" == "1" && -n "$DOMAIN" && "$DOMAIN" != "localhost" ]]; then
+  log "Выпуск Let's Encrypt для ${DOMAIN}…"
+  if AIMON_DIR="$(pwd)" AIMON_DOMAIN="$DOMAIN" bash scripts/issue-letsencrypt.sh; then
+    log "Let's Encrypt OK"
+  else
+    log "WARNING: Let's Encrypt не выпущен — остаётся self-signed. Повторите:"
+    log "  cd $(pwd) && sudo AIMON_DOMAIN=${DOMAIN} bash scripts/issue-letsencrypt.sh"
+  fi
+fi
+
 echo
 echo "== AIMon запущен =="
 echo "Domain:          https://${DOMAIN}"
