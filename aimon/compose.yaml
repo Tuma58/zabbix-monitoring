@@ -97,6 +97,8 @@ services:
     volumes:
       - ./edge/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./certs:/etc/nginx/certs:ro
+      # ACME HTTP-01 webroot (см. scripts/issue-letsencrypt.sh; nginx: /.well-known/acme-challenge/)
+      - ./certs/certbot-www:/var/www/certbot:ro
     depends_on:
       - checkmk
       - dashboard

@@ -1,4 +1,5 @@
 certs/
+!certs/.gitkeep
 .env
 .admin-credentials
 __pycache__/
