@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Выпуск / продление Let's Encrypt для AIMon (HTTP-01 standalone).
 #
+# По умолчанию использует системный certbot (apt) — без docker.io pull.
+# Docker-образ — только fallback, если certbot уже есть локально в Docker.
+#
 # На сервере:
-#   cd /opt/aimon/aimon && sudo bash scripts/issue-letsencrypt.sh
+#   curl -fsSL …/issue-letsencrypt.sh | sudo AIMON_DOMAIN=aimon.coresupport.ru bash
 #
 # Переменные:
 #   AIMON_DOMAIN=aimon.coresupport.ru
 #   AIMON_LE_EMAIL=admin@coresupport.ru
-#   AIMON_DIR=/opt/aimon/aimon   # каталог со стеком (compose.yaml)
+#   AIMON_DIR=/opt/aimon/aimon
 set -euo pipefail
 
 DOMAIN="${AIMON_DOMAIN:-aimon.coresupport.ru}"
@@ -34,13 +37,70 @@ log() { printf '==> %s\n' "$*"; }
 log "Домен: ${DOMAIN}"
 log "Каталог: ${ROOT}"
 
-# Проверка, что DNS указывает сюда (или хотя бы резолвится)
 RESOLVED="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1; exit}' || true)"
 PUBLIC_IP="$(curl -fsS --max-time 5 https://ifconfig.me 2>/dev/null || true)"
-log "DNS ${DOMAIN} → ${RESOLVED:-?}; публичный IP хоста → ${PUBLIC_IP:-?}"
+log "DNS ${DOMAIN} → ${RESOLVED:-?}; egress IP хоста → ${PUBLIC_IP:-?}"
+if [[ -n "$RESOLVED" && -n "$PUBLIC_IP" && "$RESOLVED" != "$PUBLIC_IP" ]]; then
+  log "NOTE: DNS и egress IP различаются — для HTTP-01 это нормально, если NAT :80/:443 на DNS-IP ведёт на этот LXC"
+fi
 
 compose() {
   docker compose "$@"
+}
+
+ensure_host_certbot() {
+  if command -v certbot >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Устанавливаем certbot через apt (без Docker Hub)…"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y certbot
+  command -v certbot >/dev/null 2>&1
+}
+
+run_certbot_host() {
+  local le_dir="${ROOT}/certs/letsencrypt"
+  mkdir -p "$le_dir"
+  certbot certonly \
+    --standalone \
+    --non-interactive \
+    --agree-tos \
+    --email "${EMAIL}" \
+    --preferred-challenges http \
+    --keep-until-expiring \
+    --config-dir "${le_dir}" \
+    --work-dir "${le_dir}/work" \
+    --logs-dir "${le_dir}/logs" \
+    -d "${DOMAIN}"
+}
+
+run_certbot_docker() {
+  log "Fallback: пробуем образ certbot/certbot…"
+  # лёгкий IPv4/DNS nudge (часто ломается docker.io в LXC)
+  printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' >/etc/resolv.conf 2>/dev/null || true
+  local ok=0 attempt
+  for attempt in 1 2 3; do
+    if docker pull certbot/certbot:v2.11.0; then
+      ok=1
+      break
+    fi
+    log "docker pull failed (${attempt}/3)…"
+    sleep $((attempt * 5))
+  done
+  [[ "$ok" -eq 1 ]] || return 1
+  docker run --rm \
+    -p 80:80 \
+    -v "${ROOT}/certs/letsencrypt:/etc/letsencrypt" \
+    certbot/certbot:v2.11.0 \
+    certonly \
+    --standalone \
+    --non-interactive \
+    --agree-tos \
+    --email "${EMAIL}" \
+    --preferred-challenges http \
+    --keep-until-expiring \
+    -d "${DOMAIN}"
 }
 
 # Останавливаем edge, чтобы освободить :80 для standalone-challenge
@@ -54,18 +114,12 @@ cleanup() {
 trap cleanup EXIT
 
 log "Запрос сертификата Let's Encrypt…"
-docker run --rm \
-  -p 80:80 \
-  -v "${ROOT}/certs/letsencrypt:/etc/letsencrypt" \
-  certbot/certbot:v2.11.0 \
-  certonly \
-  --standalone \
-  --non-interactive \
-  --agree-tos \
-  --email "${EMAIL}" \
-  --preferred-challenges http \
-  --keep-until-expiring \
-  -d "${DOMAIN}"
+if ensure_host_certbot; then
+  run_certbot_host
+else
+  log "apt certbot недоступен — fallback на Docker"
+  run_certbot_docker
+fi
 
 LIVE="${ROOT}/certs/letsencrypt/live/${DOMAIN}"
 [[ -f "${LIVE}/fullchain.pem" && -f "${LIVE}/privkey.pem" ]] || {
@@ -79,26 +133,24 @@ cp -f "${LIVE}/privkey.pem" "${ROOT}/certs/aimon.key"
 chmod 644 "${ROOT}/certs/aimon.crt"
 chmod 600 "${ROOT}/certs/aimon.key"
 
-# Чтобы edge видел webroot для будущих renew через webroot (опционально)
-if ! grep -q 'certbot-www:/var/www/certbot' compose.yaml 2>/dev/null; then
-  log "В compose.yaml нет mount ACME webroot — standalone-renew через этот скрипт"
-fi
-
 log "Сертификат установлен → certs/aimon.crt / certs/aimon.key"
 openssl x509 -in "${ROOT}/certs/aimon.crt" -noout -subject -issuer -dates
 
-# trap поднимет edge; принудительно recreate чтобы подхватить новые файлы
 trap - EXIT
 log "Перезапуск edge с новым сертификатом…"
 compose up -d --force-recreate edge
 
 sleep 2
 log "Проверка HTTPS…"
-curl -fsS --max-time 15 "https://${DOMAIN}/api/v1/health" && echo || \
-  curl -vk --max-time 15 "https://${DOMAIN}/" >/dev/null
+if curl -fsS --max-time 15 "https://${DOMAIN}/api/v1/health"; then
+  echo
+else
+  log "WARNING: строгая проверка TLS не прошла — смотрите openssl/curl -vk"
+  curl -skS --max-time 15 "https://${DOMAIN}/api/v1/health" && echo || true
+fi
 
 echo
 echo "== Let's Encrypt готов =="
 echo "https://${DOMAIN}"
 echo "Продление: cd ${ROOT} && sudo bash scripts/issue-letsencrypt.sh"
-echo "Cron (раз в месяц): 0 3 1 * * root cd ${ROOT} && bash scripts/issue-letsencrypt.sh >>/var/log/aimon-le.log 2>&1"
+echo "Cron: 0 3 1 * * root cd ${ROOT} && bash scripts/issue-letsencrypt.sh >>/var/log/aimon-le.log 2>&1"
