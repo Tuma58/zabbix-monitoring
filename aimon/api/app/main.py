@@ -6,8 +6,10 @@ from typing import Any
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.access import client_ip_allowed, extract_client_ip, normalize_client_cidrs
 from app.ai_assistant import AIAssistant
 from app.auth import (
     ROLES,
@@ -63,6 +65,58 @@ def _bootstrap_admin() -> None:
 
 
 _bootstrap_admin()
+
+CLIENT_ACCESS_KEY = "client_access_allowlist"
+ACCESS_EXEMPT_SUFFIXES = (
+    f"{P}/health",
+)
+
+
+def _effective_client_allowlist() -> list[str]:
+    stored = store.get_setting(CLIENT_ACCESS_KEY, None)
+    if isinstance(stored, list):
+        return [str(x).strip() for x in stored if str(x).strip()]
+    if isinstance(stored, str):
+        return [x.strip() for x in stored.split(",") if x.strip()]
+    return list(settings.client_access_allowlist_cidrs)
+
+
+def _client_access_payload(request: Request | None = None) -> dict[str, Any]:
+    networks = _effective_client_allowlist()
+    stored = store.get_setting(CLIENT_ACCESS_KEY, None)
+    client_ip = extract_client_ip(request) if request is not None else ""
+    return {
+        "enabled": bool(networks),
+        "networks": networks,
+        "defaults": list(settings.client_access_allowlist_cidrs),
+        "source": "database" if stored is not None else "env",
+        "client_ip": client_ip,
+        "client_allowed": client_ip_allowed(client_ip, networks) if client_ip else True,
+    }
+
+
+@app.middleware("http")
+async def client_access_middleware(request: Request, call_next):
+    path = request.url.path.rstrip("/") or "/"
+    if any(path == s.rstrip("/") or path.endswith(s.rstrip("/")) for s in ACCESS_EXEMPT_SUFFIXES):
+        return await call_next(request)
+    # Only gate API traffic (dashboard static is separate)
+    if not path.startswith(P.rstrip("/") + "/") and path != P.rstrip("/"):
+        return await call_next(request)
+    allowlist = _effective_client_allowlist()
+    if not allowlist:
+        return await call_next(request)
+    ip = extract_client_ip(request)
+    if client_ip_allowed(ip, allowlist):
+        return await call_next(request)
+    return JSONResponse(
+        status_code=403,
+        content={
+            "detail": f"Доступ с IP {ip or '?'} запрещён настройками AIMon",
+            "code": "CLIENT_IP_DENIED",
+            "client_ip": ip,
+        },
+    )
 
 
 @app.middleware("http")
@@ -310,6 +364,52 @@ async def delete_user(user_id: str, actor: AuthUser = Depends(require_caps("user
 @app.get(f"{P}/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+class ClientAccessIn(BaseModel):
+    networks: list[str] = Field(default_factory=list)
+
+
+@app.get(f"{P}/settings/client-access")
+async def get_client_access(
+    request: Request,
+    _user: AuthUser = Depends(require_caps("settings")),
+) -> dict[str, Any]:
+    return _client_access_payload(request)
+
+
+@app.put(f"{P}/settings/client-access")
+async def put_client_access(
+    payload: ClientAccessIn,
+    request: Request,
+    user: AuthUser = Depends(require_caps("settings")),
+) -> dict[str, Any]:
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Только администратор может менять доступ по IP")
+    try:
+        networks = normalize_client_cidrs(payload.networks)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    client_ip = extract_client_ip(request)
+    if networks and client_ip and not client_ip_allowed(client_ip, networks):
+        raise HTTPException(
+            400,
+            f"Нельзя сохранить список без вашего текущего IP ({client_ip}) — добавьте его или подсеть",
+        )
+    store.set_setting(CLIENT_ACCESS_KEY, networks)
+    return _client_access_payload(request)
+
+
+@app.post(f"{P}/settings/client-access/reset")
+async def reset_client_access(
+    request: Request,
+    user: AuthUser = Depends(require_caps("settings")),
+) -> dict[str, Any]:
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Только администратор может менять доступ по IP")
+    # Reset to env defaults (may still be empty = allow all)
+    store.set_setting(CLIENT_ACCESS_KEY, list(settings.client_access_allowlist_cidrs))
+    return _client_access_payload(request)
 
 
 @app.get(f"{P}/summary")
