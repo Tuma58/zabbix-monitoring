@@ -20,12 +20,19 @@ class JsonStore:
         os.makedirs(data_dir, exist_ok=True)
         self._path = os.path.join(data_dir, "store.json")
         if not os.path.exists(self._path):
-            self._write({"secrets": [], "scans": [], "chats": {}, "users": [], "ai_tools": []})
+            self._write({"secrets": [], "scans": [], "chats": {}, "users": [], "ai_tools": [], "settings": {}})
         # ensure keys exist on older stores
         with self._lock:
             data = self._read()
             changed = False
-            for key, default in (("chats", {}), ("users", []), ("secrets", []), ("scans", []), ("ai_tools", [])):
+            for key, default in (
+                ("chats", {}),
+                ("users", []),
+                ("secrets", []),
+                ("scans", []),
+                ("ai_tools", []),
+                ("settings", {}),
+            ):
                 if key not in data:
                     data[key] = default
                     changed = True
@@ -372,3 +379,19 @@ class JsonStore:
             data["ai_tools"] = [t for t in data.get("ai_tools", []) if str(t.get("name", "")).lower() != n]
             self._write(data)
             return len(data["ai_tools"]) < before
+
+    # portal settings ---------------------------------------------------
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            settings = self._read().get("settings") or {}
+            if key not in settings:
+                return default
+            return settings[key]
+
+    def set_setting(self, key: str, value: Any) -> Any:
+        with self._lock:
+            data = self._read()
+            bucket = data.setdefault("settings", {})
+            bucket[key] = value
+            self._write(data)
+            return value

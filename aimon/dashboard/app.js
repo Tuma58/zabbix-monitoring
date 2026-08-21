@@ -19,6 +19,8 @@
   let refreshTimer = null;
   let hostSort = { key: 'name', dir: 1 };
   let hostFilters = { name: '', address: '', site: '', type: '', device: '', state: '' };
+  let clientAccessDraft = [];
+  let clientAccessInfo = { client_ip: '', source: 'env' };
 
   function toast(message, ok = true) {
     const el = $('#toast');
@@ -134,6 +136,7 @@
     body.classList.remove('nav-open');
     if (location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
     if (name === 'settings' && can('users')) loadUsers();
+    if (name === 'settings' && can('settings')) loadClientAccess();
   }
   $$('.nav-item').forEach((n) => n.addEventListener('click', (e) => { e.preventDefault(); showView(n.dataset.view); }));
   $$('[data-goto]').forEach((b) => {
@@ -451,6 +454,97 @@
       renderUsers(cache.users);
     } catch (e) {
       $('#userRows').innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message || 'Ошибка')}</td></tr>`;
+    }
+  }
+
+  function renderClientAccess() {
+    const list = $('#clientAccessList');
+    const pill = $('#clientAccessPill');
+    const meta = $('#clientAccessMeta');
+    if (!list) return;
+    if (!clientAccessDraft.length) {
+      list.innerHTML = '<li class="empty">Список пуст — подключаться можно с любого IP</li>';
+    } else {
+      list.innerHTML = clientAccessDraft.map((cidr, index) => `
+        <li>
+          <code>${esc(cidr)}</code>
+          <button type="button" class="btn ghost" data-access-del="${index}" ${currentUser?.role === 'admin' ? '' : 'disabled'}>Удалить</button>
+        </li>`).join('');
+      $$('[data-access-del]', list).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          clientAccessDraft.splice(Number(btn.dataset.accessDel), 1);
+          renderClientAccess();
+        });
+      });
+    }
+    if (pill) {
+      pill.textContent = clientAccessDraft.length
+        ? `${clientAccessDraft.length} правил`
+        : 'без ограничений';
+      pill.classList.toggle('on', clientAccessDraft.length > 0);
+    }
+    if (meta) {
+      const ip = clientAccessInfo.client_ip || '—';
+      const src = clientAccessInfo.source === 'database' ? 'сохранено в AIMon' : 'из .env / по умолчанию';
+      meta.textContent = `Ваш IP: ${ip} · источник: ${src}`;
+    }
+    const locked = currentUser?.role !== 'admin';
+    ['clientAccessAdd', 'clientAccessAddMine', 'clientAccessClear', 'clientAccessReset', 'clientAccessSave', 'clientAccessInput']
+      .forEach((id) => { const el = $('#' + id); if (el) el.disabled = locked; });
+  }
+
+  async function loadClientAccess() {
+    if (!can('settings')) return;
+    const card = $('#clientAccessCard');
+    if (card) card.hidden = false;
+    try {
+      const payload = await api('/settings/client-access');
+      clientAccessDraft = [...(payload.networks || [])];
+      clientAccessInfo = {
+        client_ip: payload.client_ip || '',
+        source: payload.source || 'env',
+      };
+      renderClientAccess();
+    } catch (e) {
+      toast(e.message || 'Не удалось загрузить доступ по IP', false);
+    }
+  }
+
+  async function saveClientAccess() {
+    if (currentUser?.role !== 'admin') {
+      toast('Только администратор может менять доступ по IP', false);
+      return;
+    }
+    try {
+      const payload = await api('/settings/client-access', {
+        method: 'PUT',
+        body: { networks: clientAccessDraft },
+      });
+      clientAccessDraft = [...(payload.networks || [])];
+      clientAccessInfo = {
+        client_ip: payload.client_ip || '',
+        source: payload.source || 'database',
+      };
+      renderClientAccess();
+      toast(clientAccessDraft.length ? 'Ограничение доступа сохранено' : 'Доступ открыт для всех IP');
+    } catch (e) {
+      toast(e.message || 'Не удалось сохранить', false);
+    }
+  }
+
+  async function resetClientAccess() {
+    if (currentUser?.role !== 'admin') return;
+    try {
+      const payload = await api('/settings/client-access/reset', { method: 'POST' });
+      clientAccessDraft = [...(payload.networks || [])];
+      clientAccessInfo = {
+        client_ip: payload.client_ip || '',
+        source: payload.source || 'env',
+      };
+      renderClientAccess();
+      toast('Сброшено к значениям из .env');
+    } catch (e) {
+      toast(e.message || 'Не удалось сбросить', false);
     }
   }
 
@@ -1010,6 +1104,36 @@
       tr.hidden = q && !tr.textContent.toLowerCase().includes(q);
     });
   });
+
+  $('#clientAccessForm')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (currentUser?.role !== 'admin') return;
+    const input = $('#clientAccessInput');
+    const value = (input?.value || '').trim();
+    if (!value) return;
+    if (clientAccessDraft.includes(value)) {
+      toast('Уже в списке', false);
+      return;
+    }
+    clientAccessDraft.push(value);
+    if (input) input.value = '';
+    renderClientAccess();
+  });
+  $('#clientAccessAddMine')?.addEventListener('click', () => {
+    const ip = (clientAccessInfo.client_ip || '').trim();
+    if (!ip) {
+      toast('Текущий IP неизвестен — сначала обновите страницу', false);
+      return;
+    }
+    if (!clientAccessDraft.includes(ip)) clientAccessDraft.push(ip);
+    renderClientAccess();
+  });
+  $('#clientAccessClear')?.addEventListener('click', () => {
+    clientAccessDraft = [];
+    renderClientAccess();
+  });
+  $('#clientAccessReset')?.addEventListener('click', () => resetClientAccess());
+  $('#clientAccessSave')?.addEventListener('click', () => saveClientAccess());
 
   /* ---------- Boot ---------- */
   async function boot() {

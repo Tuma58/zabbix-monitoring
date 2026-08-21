@@ -575,6 +575,57 @@ body:not(.authed) .ai-fab { display: none !important; }
 .field.check { display: flex; align-items: center; gap: 10px; flex-direction: row; }
 .field.check span { margin: 0; font-weight: 600; }
 .field.check input { width: 18px; height: 18px; }
+
+.access-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.access-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.access-list li.empty {
+  color: var(--ink-soft);
+  font-size: 14px;
+  justify-content: flex-start;
+}
+.access-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+.access-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.access-form .field.inline { flex: 1; min-width: 240px; }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(91, 123, 154, 0.12);
+  color: var(--ink-soft);
+  border: 1px solid var(--border);
+}
+.pill.on {
+  background: rgba(46, 125, 90, 0.12);
+  color: #2e7d5a;
+}
 .host-checks {
   display: grid;
   gap: 8px;

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Network scan safety: only these CIDRs may be scanned
     scan_allowlist: str = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10"
 
+    # Client access: empty = allow all; otherwise only listed IPs/CIDRs may call the API
+    client_access_allowlist: str = ""
+
     # DeepSeek (AI service) — optional; empty disables AI endpoints gracefully
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -48,6 +51,10 @@ class Settings(BaseSettings):
     @property
     def scan_allowlist_cidrs(self) -> list[str]:
         return [c.strip() for c in self.scan_allowlist.split(",") if c.strip()]
+
+    @property
+    def client_access_allowlist_cidrs(self) -> list[str]:
+        return [c.strip() for c in self.client_access_allowlist.split(",") if c.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:

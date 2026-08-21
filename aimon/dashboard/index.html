@@ -381,7 +381,7 @@
 
         <!-- Settings -->
         <section class="view" data-view="settings">
-          <div class="page-head"><div><p class="eyebrow">Система</p><h1>Настройки</h1><p class="lead">Подключение к Checkmk, пользователи и роли.</p></div></div>
+          <div class="page-head"><div><p class="eyebrow">Система</p><h1>Настройки</h1><p class="lead">Подключение к Checkmk, доступ по IP, пользователи и роли.</p></div></div>
 
           <div class="card" id="usersCard" hidden>
             <div class="card-head">
@@ -394,6 +394,29 @@
                 <thead><tr><th>Пользователь</th><th>Роль</th><th>Узлы</th><th>Статус</th><th></th></tr></thead>
                 <tbody id="userRows"><tr><td colspan="5" class="empty">Загрузка…</td></tr></tbody>
               </table>
+            </div>
+          </div>
+
+          <div class="card" id="clientAccessCard">
+            <div class="card-head">
+              <h2>Доступ по IP</h2>
+              <span class="pill" id="clientAccessPill">без ограничений</span>
+            </div>
+            <p class="lead" style="margin:0 0 14px">Разрешите вход в AIMon только с указанных IP и подсетей (CIDR). Пустой список — доступ открыт для всех. Сохранить можно только если ваш текущий IP входит в список.</p>
+            <p class="lead" id="clientAccessMeta" style="margin:0 0 12px">Ваш IP: —</p>
+            <ul class="access-list" id="clientAccessList" aria-label="Разрешённые IP и подсети"></ul>
+            <form id="clientAccessForm" class="access-form" autocomplete="off">
+              <label class="field inline">
+                <span>IP или подсеть</span>
+                <input id="clientAccessInput" placeholder="100.10.10.0/24 или 94.181.191.114" pattern="^[0-9a-fA-F:.]+(/[0-9]{1,3})?$" title="IPv4/IPv6 или CIDR">
+              </label>
+              <button type="submit" class="btn ghost" id="clientAccessAdd">Добавить</button>
+            </form>
+            <div class="row-actions" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn ghost" id="clientAccessAddMine">Добавить мой IP</button>
+              <button type="button" class="btn ghost" id="clientAccessClear">Очистить (открыть всем)</button>
+              <button type="button" class="btn ghost" id="clientAccessReset">Сбросить к .env</button>
+              <button type="button" class="btn primary" id="clientAccessSave">Сохранить</button>
             </div>
           </div>
 
